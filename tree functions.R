@@ -11,7 +11,8 @@ library(MonoPhy)
 library(data.table)
 library(foreach)
 library(doParallel)
-#source("G:/My Drive/Science/R programs/tree functions.R") #use this to load this file into an r book
+#source("B:\OneDrive - University of Illinois - Urbana\Science\R programs\Roach_brain_Phylos\tree functions.R")
+ #use this to load this file into an r book
 
 ##Reminder: Explanation of subsetting lists/dataframes in R: https://adv-r.hadley.nz/subsetting.html
 

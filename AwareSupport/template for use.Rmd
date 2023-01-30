@@ -1,0 +1,109 @@
+---
+title: "AwareSupportTest"
+author: "D. Evangelista"
+date: "2023-01-25"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r load SupportAware}
+source("B:/OneDrive - University of Illinois - Urbana/Science/R programs/Roach_brain_Phylos/AwareSupport/node support transfering.R") #path to R source file
+
+```
+
+###Introduction
+AwareSupport was designed to take node (bipartition) support values from a backbone tree and map them onto a "full" tree. It combines support values from two different trees that have overlapping tips. Therefore, the goal is to allow a supertree to have meaningful support values, each of which corresponds to a specific tree (and is annotated with a label denoting the tree it came from).
+
+It was specifically designed to achieve this when a supertree was built incrementally through multiple "tiers" of concatenation. In the original study (Evangelista et al. 2024) this was done using datasets of increasing quality. Hence, AwareSupport does certain things that are appropriate for this context. As a result, it may not give desired results if applied to another context.
+
+Here's what it does...
+
+Let's say we have three trees with increase taxon sampling
+
+Tree 1 (backbone), Tree 2 (skeleton), Tree 3 (whole)
+
+The backbone-tree has the fewest amount of taxa and the whole-tree has your complete taxon sample. The code will go through each node in your whole-tree and go backwards through each other tree checking if that node was reocvered. It will check the skeleton-tree first. If it finds that bipartition it will check the backbone tree. If it finds it in the backbone tree then it uses the backbone support value. If it doesn't find it in the backbone-tree then it uses the suport value from the skeleton-tree. And if it doesn't find the bipartition in any tree it just keeps the node support value from the whole-tree. Regardless of which tree it chooses the node value for, it will provide an annotation (e.g., "backbone", "skeleton", "whole") for that node value, so you can see which tier the node support value came from. 
+
+The code traverses the whole-tree from the tips to the root, so it requires a rooted tree. There is a check incorporated to ensure that all nodes in the "whole tree" are evaluated, so it shouldn't miss any.
+
+
+###Analying your trees
+Note: If you don't want to import your own data you can skip to the next section and simply simulate some trees to see how the code works.
+
+Step 1: Import your data
+
+
+```{r Import}
+#set working directory
+#import all your trees
+#input the names for your trees (e.g., tier names)
+
+#setwd()#the directory your input files are in. Skip this if you want all your files in the same folder as this R notebook
+
+listofOutgroups<-c("Outgroup1","Outgroup2")#define the outgroup taxa for your trees. If you most distant outgroup is in all trees then you only need to have a list of one element. Otherwise, make this object a list of multiple outgroups starting from the most distant to the most closely related to the ingroup. If the latter case, the support values in the outgroup (only) will likely not be correct.
+
+
+#imported rooted versions of all your tiers. Repeat for as many tiers as needed
+tier1<-rootIncompleteTree(read.tree(paste(dir,"backbone.treefile", sep="")), listofOutgroups)
+tiern<-rootIncompleteTree(read.tree(paste(dir,"other.treefile", sep="")), listofOutgroups)
+
+#list all your tiers from most inclusive (i.e., whole tree) to least inclusive (i.e., backbone tree).
+allTierTrees<-c(tiern, tier1)
+
+#give labels for all your tiers. This list should be the same length as allTierTrees. Shorter labels are better
+tierNames<-c("B", "A")
+
+
+```
+
+Now run AwareSupport to map the node support values
+```{r}
+
+totalAwareSupport(allTierTrees, tierNames, supportCutOff = 95, verbose=FALSE)
+#supportCutOff should be the node support value defined as the cutoff for your constraints between tiers. 100 is the most conservative. If your cutoff varied per tier you cannot specify that here. I recommend you choose some value intermediate between your actual cutoffs, but the result may not be ideal.
+
+
+```
+
+
+
+
+###Randomized trees
+Testing the code with random trees
+
+```{r create randomized trees to test}
+###Now I can create three randomized trees to test AwareSupport on
+backboneTree<-makeRandomizedTreeWithRandSupport(9)
+skeletonTree<-addRandomTaxa(backboneTree, 5, 10)
+fleshTree<-addRandomTaxa(skeletonTree, 9, 1000)
+threeRandomizedTrees<-c(fleshTree, skeletonTree,backboneTree)
+
+#uncomment to save your trees and examine them manually (e.g., in FigTree)
+#setwd("C://Users//devangelista//Desktop") 
+#write.tree(threeRandomizedTrees, "threeRando.trees")
+#threeRandomizedTrees<-read.tree("threeRando.trees")
+
+#plot the tree below this chunk to examine manually in R
+plot.phylo(threeRandomizedTrees[[1]], show.node.label = TRUE)
+
+```
+
+```{r test the support mapping code on your randomized trees}
+
+allTierTrees<-threeRandomizedTrees #this object should have the trees in order from highest tier to lowest tier (i.e. most inclusive to least inclusive)
+tierLabels<-tierNames<-c("C", "B", "A") #the names of the three trees in the same order as the trees
+supportCutOff <- 75 #the lowest support value that will be accepted from a tier. You can also try anything you like for this test but 65 to 90 is recommended
+
+#Do the actual support mapping
+mappedTree<-totalAwareSupport(threeRandomizedTrees, tierNames, supportCutOff)
+
+#Plot the support mapped ree
+plot.phylo(ladderize(mappedTree[[1]]), show.node.label = TRUE)
+
+```
+
+

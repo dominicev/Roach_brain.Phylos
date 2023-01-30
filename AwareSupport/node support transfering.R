@@ -6,8 +6,10 @@ library(TreeDist)
 library(dplyr)
 library(TreeTools)
 library(RRphylo)
-source("C:\\Users\\devangelista\\Desktop\\tree functions.r")
-options(show.error.locations = TRUE)
+devtools::source_url("https://github.com/dominicev/Roach_brain_Phylos/blob/main/tree%20functions.R")
+#options(show.error.locations = TRUE)
+library(ips)
+
 
 
 #####getDescendantTipNames: return the names of descendants (tips) of a given node number#####
@@ -561,10 +563,22 @@ makeRandomizedTreeWithRandSupport<-function(nTips){
   
   }
 
+#A function that collapses unsupported nodes and then randomly resolves them again
+
+collapseAndReResolveRandomly<-function(phy, cutoff = 75){
+  apple<-collapseUnsupportedEdges(phy, value = "node.label", cutoff)
+  pear<-multi2di(apple, random = TRUE, equiprob = TRUE)
+  
+  possibleNodeValues<-round((range01(rgamma(1000, shape = 2, rate = 2))*100-100)*-1 ,0)#draw random values from a gamma distribution and scale them between 0 and 100, with the highest probability draws being near 100. 
+  
+  pear$node.label<-replace(pear$node.label,pear$node.label=="", sample(possibleNodeValues, pear$Nnode      ))
+  
+  return(pear)
+}
+
+
 
 #Now make a function that randomly adds tips to an existing tree and choosing a random node label for it
-
-
 
 addRandomTaxa<-function(phy, nTips, factor, rootingTaxon = "1"){
 ###NOTE: nTips can be no larger than the number of tips in phy
@@ -602,59 +616,34 @@ addRandomTaxa<-function(phy, nTips, factor, rootingTaxon = "1"){
 }
 
     
-###Now I can create three randomized trees to test AwareSupport on
-backboneTree<-makeRandomizedTreeWithRandSupport(9)
-skeletonTree<-addRandomTaxa(backboneTree, 5, 10)
-fleshTree<-addRandomTaxa(skeletonTree, 9, 1000)
-threeRandomizedTrees<-c(fleshTree, skeletonTree,backboneTree)
+#now combine the randomized tree functions into a single one for more easily making randomized test data NOTE: This will only make a 4 tiered scenario
 
-setwd("C:\\Users\\devangelista\\Desktop")
-write.tree(threeRandomizedTrees, "threeRando.trees")
-#threeRandomizedTrees<-read.tree("threeRando.trees")
-
-#Now test the support mapping code
-#
-threeRandomizedTrees[[3]]
-
-mappedTree<-totalAwareSupport(threeRandomizedTrees, c("C", "B", "A"), supportCutOff = 75, verbose=TRUE)
-#rlang::last_error()
-#traceback()
-#options(error=traceback)
-#debug()
-#browser()
-
-
-plot.phylo(ladderize(mappedTree[[1]]), show.node.label = TRUE)
-plot.phylo(threeRandomizedTrees[[1]], show.node.label = TRUE)
-
-
-allTierTrees<-threeRandomizedTrees #this object should have the trees in order from highest tier to lowest tier (i.e. most inclusive to least inclusive)
-tierLabels<-tierNames<-c("C", "B", "A") #the names of the three trees in the same order as the trees
-supportCutOff = 75
-verbose=FALSE
-nodeList<-findOrderToTraverseHighestTree(allTierTrees)
-
-
-getDescendantTipNames(allTierTrees[[1]], 15)
-nodeNumber<-15#  ==nodeList[[3]]
-
-###Problems with case B
-###1. The 93/C should be 98/B
-
-
-###Problems with case A
-###The Case A random trees show a few problems.
-###1. The 82 from tier A should appear in the final tree but it doesn't.  The 77 on the root should be 82A. This problem is simply due to the fact that the software doesn't treat the root.
-###2. The 88 from tier B shouldn't be on any of the nodes but since it's above the cutoff the software wants to put it on the tree somewhere, so it is putting it on the next node towards the root, which is wrong. On that node there should be 38/C
-
-####Fixing problem 2. I have checked totalAwareSupport. This part seems fine. The problem is in how evaluateNodeSupport assesses the node in question. It doesn't check to see if there are lower tier taxa in both halves of the partition descending from that node. I added a fix for this and it seems to have worked.
-####
-####
-
-####October 2022 NOTE: There is a problem with numbering of the clades (I think)
-#### and annotation of support values. This can be seen in the Blaberidae clade with Hyposphaeria.
-
-
+makeRandomizedTiers<-function(nTips, nTaxa2Add, cutoff ){
+  
+  #Backbone tier
+  randStartPhy<-makeRandomizedTreeWithRandSupport(nTips)
+  randStartPhy2<-collapseAndReResolveRandomly(randStartPhy, cutoff)
+  
+  #Skeleton tier
+  tier2Phy<-addRandomTaxa(randStartPhy2, nTaxa2Add, 100, rootingTaxon = "1")
+  tier2Phy2<-collapseAndReResolveRandomly(tier2Phy, cutoff)
+  
+  #Flesh tier
+  tier3Phy<-addRandomTaxa(tier2Phy2, nTaxa2Add, 100, rootingTaxon = "1")
+  tier3Phy2<-collapseAndReResolveRandomly(tier3Phy, cutoff)
+  
+  #Whole tier
+  tier4Phy<-addRandomTaxa(tier3Phy2, nTaxa2Add, 100, rootingTaxon = "1")
+  
+  
+  #combine
+  allRandomizedTierTrees<-c(tier4Phy, tier3Phy, tier2Phy, randStartPhy)
+  
+  plot.phylo(tier4Phy, show.node.label = TRUE)
+  
+  
+  return(allRandomizedTierTrees)
+}
 
 
 
