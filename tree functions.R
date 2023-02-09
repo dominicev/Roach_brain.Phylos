@@ -11,6 +11,8 @@ library(MonoPhy)
 library(data.table)
 library(foreach)
 library(doParallel)
+library(TreeTools)
+
 #source("B:\OneDrive - University of Illinois - Urbana\Science\R programs\Roach_brain_Phylos\tree functions.R")
  #use this to load this file into an r book
 
@@ -463,4 +465,11 @@ ggsave(file=outfileName, plot=plot)
 
 #####getDescendantTipNames: return the names of descendants (tips) of a given node number#####
 getDescendantTipNames<-function(phylo, nodeNum){unname(slice(as.data.frame(phylo$tip.label), unlist(Descendants(phylo, nodeNum, "tips"))))
+}
+
+
+#####collapseUnsupportedNodes: collapse nodes in a tree based on their node label (i.e., bootstrap support)
+collapseUnsupportedNodes<-function(phy, cutoff = 75){
+  CollapseNode(phy, length(phy$tip.label)+match(TRUE, phy$node.label<cutoff))
+  
 }
