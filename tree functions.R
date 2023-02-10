@@ -473,3 +473,29 @@ collapseUnsupportedNodes<-function(phy, cutoff = 75){
   CollapseNode(phy, length(phy$tip.label)+match(TRUE, phy$node.label<cutoff))
   
 }
+
+
+#####Add node support to a tree from another tree
+
+concatNodeLabels<-function(finalTree, sourceTree){
+  #get a list of all the nodes to be annotated
+  finalTreeNodes<-findOrderToTraverseHighestTree(c(finalTree))
+  
+  for(nodeID in finalTreeNodes[-1]){
+    
+    #the corresponding node in the concatenation tree
+    correspondingNodeID<-try(getMRCA(sourceTree, unlist(getDescendantTipNames(finalTree, nodeID))), silent=TRUE)
+    #print(paste(nodeID, correspondingNodeID))
+    #check that the node is monophyletic in the corresponding tree
+    takeNodeValueQ<-checkLowerTierTaxaMonophyly(c(finalTree, sourceTree),  
+                                                unlist(getDescendantTipNames(finalTree,nodeID))
+                                                , 2)
+    ifelse(takeNodeValueQ, 
+           finalTree$node.label[[nodeID-Nnode(finalTree)]]<-paste(finalTree$node.label[[nodeID-Nnode(finalTree)]], #original node support value
+                                                                  sourceTree$node.label[[correspondingNodeID-Ntip(sourceTree)]], sep="|") #new node support value
+           , NA)
+    
+  }
+}
+
+

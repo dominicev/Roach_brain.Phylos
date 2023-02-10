@@ -1,3 +1,5 @@
+#open the neccessary libraries
+
 library(ape)
 library(phangorn)
 library(phytools)
@@ -7,187 +9,25 @@ library(dplyr)
 library(TreeTools)
 library(RRphylo)
 library(devtools)
-#devtools::source_url("https://github.com/dominicev/Roach_brain_Phylos/blob/main/tree%20functions.R")
-source("B:/OneDrive - University of Illinois - Urbana/Science/R programs/Roach_brain_Phylos/tree functions.R")
-#options(show.error.locations = TRUE)
 library(ips)
+#source("B:/OneDrive - University of Illinois - Urbana/Science/R programs/Roach_brain_Phylos/tree functions.R") #use this to load the dependency script locally
+devtools::source_url("https://github.com/dominicev/Roach_brain_Phylos/blob/main/tree%20functions.R")
 
 
+#troubleshooting options
+#options(show.error.locations = TRUE)
+
+
+###################################
+#######Dependency functions########
+###################################
 
 #####getDescendantTipNames: return the names of descendants (tips) of a given node number#####
 getDescendantTipNames<-function(phylo, nodeNum){unname(slice(as.data.frame(phylo$tip.label), unlist(Descendants(phylo, nodeNum, "tips"))))
 }
 
-#####transferSingleNodeSupport: Transfer node support value from one tree to another#####
-transferSingleNodeSupport<-function(lowerTeirTree, 
-                                    nodeNumber,#this value should be greater than the number of tips but lower than the number of tips +number of nodes
-                                    higherTeirTree, supportCutOff = 95){
-  #get bipartition node value in one tree
-  descTipIDs<-Descendants(lowerTeirTree, nodeNumber, "tips")
-  descTipNames<-getDescendantTipNames(lowerTeirTree, nodeNumber)
-  #descTipNames
-  nodeLabel<-lowerTeirTree$node.label[nodeNumber-Ntip(lowerTeirTree)]
-  #find same node in next tree
-  higherTreeCorrespondingNode<-getMRCA(higherTeirTree, unlist(as.data.frame(descTipNames)))
-  #compare the node support values between the two trees
-  lowerTierNodeValue<-lowerTeirTree$node.label[nodeNumber-Ntip(lowerTeirTree)]
-  higherTierNodeValue<-higherTeirTree$node.label[higherTreeCorrespondingNode-Ntip(higherTeirTree)]
-  
-  #replace the node values if the value is >cutOff%
-  ifelse(
-    as.numeric(lowerTierNodeValue)>=supportCutOff, 
-    {higherTeirTree$node.label[higherTreeCorrespondingNode-Ntip(higherTeirTree)]<-lowerTierNodeValue
-    print(paste(paste(lowerTierNodeValue, " replaces (vs.1) ..."), higherTierNodeValue, " on node ", nodeNumber, "/", as.character(higherTreeCorrespondingNode-Ntip(higherTeirTree))))
-    },{
-      #print("Status check 3")
-      
-      #If the node value is <95% then we need to ensure that the same bipartition is present in both trees...if not we keep the node support value in the second tree
-      
-      #get the new taxa in the higher tier tree
-      
-      higherTierTaxa<-setdiff(higherTeirTree$tip.label, lowerTeirTree$tip.label)#a list of all the new taxa added in the higher tier
-      
-      #compare the tip taxa in the two clades
-      #print(higherTreeCorrespondingNode)
-      higherDescTipNames<-getDescendantTipNames(higherTeirTree,higherTreeCorrespondingNode )
-      
-      isTheLowerTierNodeValueValid<-{length(
-        intersect(
-          setdiff(higherDescTipNames, descTipNames)[[1]], higherTierTaxa
-        )
-      )==length(
-        setdiff(higherDescTipNames, descTipNames)[[1]]
-      )} #determines if the additional taxa are all higher tier taxa. If TRUE I should take the value from the lower tier, if FALSE I should take the value from the higher tier.
-      
-      ifelse(is.na(as.numeric(lowerTierNodeValue)),{print(paste("Node ", as.character(nodeNumber), " is NA. Retaining higher teir value." ))
-        isTheLowerTierNodeValueValid<-FALSE}
-        , isTheLowerTierNodeValueValid<-isTheLowerTierNodeValueValid)#this is an extra step to check that the node values isn't NA. If it is NA then we force the value FALSE, if it isn't NA then we retain the previous value of TRUE or FALSE
-      
-      ifelse(isTheLowerTierNodeValueValid,
-             {print(paste(paste(lowerTierNodeValue, " replaces (vs.2)..."), higherTierNodeValue, " on node ", nodeNumber, "/", as.character(higherTreeCorrespondingNode-Ntip(higherTeirTree))))
-               higherTeirTree$node.label[higherTreeCorrespondingNode-length(higherTeirTree$tip.label)]<-lowerTierNodeValue},{
-                 print(paste(paste("Node ",as.character(nodeNumber)), " not the same in both trees. Retaining higher node (",as.character(higherTreeCorrespondingNode),") label:",as.character(higherTeirTree$node.label[higherTreeCorrespondingNode-Ntip(higherTeirTree)]) ))
-                 higherTeirTree$node.label[higherTreeCorrespondingNode-Ntip(higherTeirTree)]<- higherTeirTree$node.label[higherTreeCorrespondingNode-Ntip(higherTeirTree)]})}
-  )
-  
-  return(higherTeirTree$node.label)
-}
 
-#####transferAllNodeSupportValues: Looping the above over all nodes and support values#####
-
-
-transferAllNodeSupportValues<-function(lowerTeirTree, higherTeirTree, supportCutOff = 95) {
-  for (i in (Ntip(lowerTeirTree)):(Ntip(lowerTeirTree)+lowerTeirTree$Nnode))
-  {higherTeirTree$node.label<-transferSingleNodeSupport(lowerTeirTree, i, higherTeirTree , supportCutOff)}
-  return(higherTeirTree)
-}
-
-#####transferSingleNodeSupportAndStatus: Transfer node support value AND status from one tree to another#####
-
-transferSingleNodeSupportAndStatus<-function(
-  lowerTeirTree, 
-  nodeNumber,#this value should be greater than the number of tips but lower than the number of tips +number of nodes
-  higherTeirTree, 
-  defaultLowerStatus,#A string signifying the status of the lower tier node values
-  supportCutOff = 95 #The bootstrap value you consider to be "high support" that you want to be carried through to next tier
-){
-  #get bipartition node value in one tree
-  descTipIDs<-Descendants(lowerTeirTree, nodeNumber, "tips")
-  descTipNames<-getDescendantTipNames(lowerTeirTree, nodeNumber)
-  #descTipNames
-  nodeLabelAndStatus<-lowerTeirTree$node.label[nodeNumber-Ntip(lowerTeirTree)]
-  
-  lowerTierNodeValue<-ifelse(grepl("/",nodeLabelAndStatus),
-                             strsplit(lowerTeirTree$node.label[nodeNumber-Ntip(lowerTeirTree)], "/")[[1]][[1]] #If there is a status in the node label then split it and only store the label
-                             , lowerTeirTree$node.label[nodeNumber-Ntip(lowerTeirTree)]) #if there is only a node value then no need to split the label
-  
-  #set the lower status for that node
-  statusLower<-ifelse(grepl("/",nodeLabelAndStatus), strsplit(nodeLabelAndStatus, "/")[[1]][[2]],defaultLowerStatus )
-  
-  #find same node in next tree
-  higherTreeCorrespondingNode<-getMRCA(higherTeirTree, unlist(as.data.frame(descTipNames)))
-  #compare the node support values between the two trees
-  
-  higherTierNodeValue<-ifelse(grepl("/",higherTeirTree$node.label[higherTreeCorrespondingNode-Ntip(higherTeirTree)]),strsplit(higherTeirTree$node.label[higherTreeCorrespondingNode-Ntip(higherTeirTree)], "/")[[1]][[1]] ,higherTeirTree$node.label[higherTreeCorrespondingNode-Ntip(higherTeirTree)])
-  
-  #replace the node values if the value is >supportCutOff%
-  ifelse(
-    as.numeric(lowerTierNodeValue)>=supportCutOff, 
-    {print(paste(paste(lowerTierNodeValue, " replaces (vs.1) ..."), higherTierNodeValue, " on node ", nodeNumber, "/", as.character(higherTreeCorrespondingNode-Ntip(higherTeirTree))))
-      higherTeirTree$node.label[higherTreeCorrespondingNode-Ntip(higherTeirTree)]<-paste(lowerTierNodeValue, "/", statusLower,sep="")
-    },{
-      
-      #If the node value is <95% then we need to ensure that the same bipartition is present in both trees...if not we keep the node support value in the second tree
-      
-      #get the new taxa in the higher tier tree
-      
-      higherTierTaxa<-setdiff(higherTeirTree$tip.label, lowerTeirTree$tip.label)#a list of all the new taxa added in the higher tier
-      
-      #compare the tip taxa in the two clades
-      #print(higherTreeCorrespondingNode)
-      higherDescTipNames<-getDescendantTipNames(higherTeirTree,higherTreeCorrespondingNode )
-      
-      isTheLowerTierNodeValueValid<-{length(
-        intersect(
-          setdiff(higherDescTipNames, descTipNames)[[1]], higherTierTaxa
-        )
-      )==length(
-        setdiff(higherDescTipNames, descTipNames)[[1]]
-      )} #determines if the additional taxa are all higher tier taxa. If TRUE I should take the value from the lower tier, if FALSE I should take the value from the higher tier.
-      
-      ifelse(is.na(as.numeric(lowerTierNodeValue)),{print(paste("Node ", as.character(nodeNumber), " is NA. Retaining higher teir value." ))
-        isTheLowerTierNodeValueValid<-FALSE}
-        , isTheLowerTierNodeValueValid<-isTheLowerTierNodeValueValid)#this is an extra step to check that the node values isn't NA. If it is NA then we force the value FALSE, if it isn't NA then we retain the previous value of TRUE or FALSE
-      
-      ifelse(isTheLowerTierNodeValueValid,
-             {print(paste(paste(lowerTierNodeValue, " replaces (vs.2)..."), higherTierNodeValue, " on node ", nodeNumber, "/", as.character(higherTreeCorrespondingNode-Ntip(higherTeirTree))))
-               higherTeirTree$node.label[higherTreeCorrespondingNode-Ntip(higherTeirTree)]<-paste(lowerTierNodeValue, "/",statusLower,sep="")},
-             {print(paste(paste("Node ",as.character(nodeNumber)), " not the same in both trees. Retaining higher node (",as.character(higherTeirTree$node.label[higherTreeCorrespondingNode-Ntip(higherTeirTree)]),") label:",as.character(higherTeirTree$node.label[higherTreeCorrespondingNode-Ntip(higherTeirTree)]) ))
-               #higherTeirTree$node.label[higherTreeCorrespondingNode-length(higherTeirTree$tip.label)]<- higherTeirTree$node.label[higherTreeCorrespondingNode-length(higherTeirTree$tip.label)]
-             })}
-  )
-  
-  return(higherTeirTree$node.label)
-}
-
-#####checkUnlabelledNodes: additional function to put a label on unlabeled nodes#####
-checkUnlabelledNodes<-function(nodeLabel,defaultHigherStatus ){ifelse(grepl("/",nodeLabel),nodeLabel
-                                                                      , ifelse(nodeLabel=="","",paste(nodeLabel,"/" , defaultHigherStatus, sep="")))}
-
-
-#####transferAllNodeSupportAndStatus: Looping the above over all nodes and support values and add status#####
-transferAllNodeSupportAndStatus<-function(lowerTeirTree, higherTeirTree,defaultLowerStatus,defaultHigherStatus, supportCutOff) {
-  for (i in (Ntip(lowerTeirTree)):(Ntip(lowerTeirTree)+lowerTeirTree$Nnode))
-  {higherTeirTree$node.label<-transferSingleNodeSupportAndStatus(lowerTeirTree, i, higherTeirTree, defaultLowerStatus, supportCutOff)
-  }
-  higherTeirTree$node.label<-unlist(
-    lapply(higherTeirTree$node.label,checkUnlabelledNodes, defaultHigherStatus)
-  )
-  return(higherTeirTree)
-}
-
-
-
-###########################################################################################################
-#####NOTE##################################################################################################
-#The above functions go in order from the most conservative (most exclusive) tree to the largest (least exclusive) tree. However, it appears that many of the nodes are incorrectly labeled. A good example of this is Blaberoidea. Blaberoidea is supported in the ABA tree with 100% support but there is no Blaberoidea (SS or SL) node with 100% support (check CDD tree with modified support).
-#Below I will try and accomplish the same goal going in the reverse order (starting from the largest tree and working backwards) to see if it doesn't result in a more expected result.
-###########################################################################################################
-
-#dependency function
-doesLowerCladeHaveAValidSupportLevel<-function(allTierTrees, lowerTierPart, leftoverTaxa, supportCutOff=95){
-  binary<-try(
-  {
-    nodeLabelLower<-allTierTrees[[lowerTierPart]]$node.label[[ getMRCA(allTierTrees[[lowerTierPart]],leftoverTaxa)-Ntip(allTierTrees[[lowerTierPart]])]]
-  as.numeric(nodeLabelLower)>=supportCutOff
-  }
-  , silent=TRUE)
-return(isTRUE(binary))
-}
-
-
-
-#dependency function
+####checkLowerTierTaxaMonophyly: returns TRUE if the taxa in the lower tier tree are monophyletic with respect to the clade being examined
 checkLowerTierTaxaMonophyly<-function(allTierTrees, currentCladeTaxa, lowerTierPart){binary<-try(
   {
     leftoverTaxa<<-intersect(unlist(currentCladeTaxa),  allTierTrees[[lowerTierPart]]$tip.label)
@@ -200,7 +40,7 @@ return(isTRUE(binary))
 }
 
 
-#dependency function
+#####useWhichNodeLabel: returns the node label for the tier indicated
 useWhichNodeLabel<-function(tier, allTierTrees, lowerTierPart, nodeNum, tierLabelHigher, tierLabelLower, leftoverTaxa){
   #currentCladeTaxa<-getDescendantTipNames(allTierTrees[[1]],nodeNum)
   
@@ -230,7 +70,7 @@ useWhichNodeLabel<-function(tier, allTierTrees, lowerTierPart, nodeNum, tierLabe
   return(answer)
 }
 
-#dependency function
+#####checkIfTierShouldbeLowered: checks the next lowest tier to see if they are valid for the node in question
 checkIfTierShouldbeLowered<-function(allTierTrees, lowerTierPart, currentCladeTaxa){
   totalTiers<<-length(allTierTrees)
   higherTierTaxa<-unlist(allTierTrees[[1]]$tip.label)
@@ -254,7 +94,8 @@ checkIfTierShouldbeLowered<-function(allTierTrees, lowerTierPart, currentCladeTa
   }
 
 
-#list some tippy clades function
+####findTippiestClades: list some tippy clades function. This is used to identify the order that the nodes should be traversed. It will first find the nodes that are more derived (assumes proper rooting)
+
 findTippiestClades<-function(highestTeirTree){
   numTaxaHigh<-Ntip(highestTeirTree)
   sisterList<-list(1:numTaxaHigh-1) #create a dummy list to put the values into (for tippiest nodes)
@@ -289,8 +130,7 @@ findTippiestClades<-function(highestTeirTree){
   }
 
 
-####This section (bipartition check) was added Dec 2022 and then functionalized Feb 2023
-#determine if the current node lacks clade taxa in both halves of the descending bipartition. If TRUE, then the tier is an invalid source of node support
+####areCladeTaxaLackingFromAnyBiPartitions: determines if the current node lacks clade taxa in both halves of the descending bipartition. If TRUE, then the tier is an invalid source of node support
 
 areCladeTaxaLackingFromAnyBiPartitions<-function(allTierTrees, currentNode, lowerTierPart){
     highestTeirTree<-allTierTrees[[1]]
@@ -320,8 +160,7 @@ areCladeTaxaLackingFromAnyBiPartitions<-function(allTierTrees, currentNode, lowe
 }
 
 
-####This section lowestTierCladeAppearsIn was added feb 2023. 
-####This function finds the lowest tier appropriate to get the node support values for the clade in question
+####lowestTierCladeAppearsIn: This function finds the lowest tier appropriate to get the node support values for the clade in question
 ####It checks both monophyly of the clade at all tiers and the bipartition presence of taxa within the clade
 
 
@@ -348,6 +187,7 @@ lowestTierCladeAppearsIn<-function(allTierTrees,currentNode, currentCladeTaxa){
 }
 
 findNodeID<-function(phy, taxonList){findMRCA(phy, taxonList)-Ntip(phy)}
+
 findNodeLabel<-function(phy, taxonList){phy$node.label[[findMRCA(phy, taxonList)-Ntip(phy)]]}
 
 
@@ -361,7 +201,10 @@ findNodeLabel<-function(phy, taxonList){phy$node.label[[findMRCA(phy, taxonList)
 #######for a single node, find which tree has the valid node support value#####
 ###############################################################################
 
-##NOTE: This is v2 of this function. V1 is in a different file.
+
+####evaluateNodeSupport: This function is the core of AwareSupport. This is the function that assessing any given node on the highest tier tree.
+
+##NOTE: This is v2 of this function. V1 is in a different file. Both should work, however, they work differently so will yield slightly different results. 
 
 evaluateNodeSupport<-function(
     allTierTrees, #this object should have the trees in order from highest tier to lowest tier (i.e. most inclusive to least inclusive)
@@ -381,7 +224,6 @@ evaluateNodeSupport<-function(
   
   #Read a single node
   
-  #descTipIDs<-Descendants(highestTeirTree, nodeNumber, "tips")
   descTipNames<-getDescendantTipNames(highestTeirTree, nodeNumber)
   
   #Quality check 1
@@ -392,7 +234,7 @@ evaluateNodeSupport<-function(
   currentNode<-nodeNumber
   currentCladeTaxa<-getDescendantTipNames(highestTeirTree,currentNode)
   
-  lowerTierPart<-lowestTierCladeAppearsIn(allTierTrees,currentNode, currentCladeTaxa) #this was originally defined as "2" and then allowed to be adjusted using the workflow below. However, I think this is unnecessary.
+  lowerTierPart<-lowestTierCladeAppearsIn(allTierTrees,currentNode, currentCladeTaxa) #this was originally defined as "2" and then allowed to be adjusted using the workflow below. However, I think this way of doing it is unnecessary.
   
   
   leftoverTaxa<-intersect(unlist(currentCladeTaxa),  allTierTrees[[lowerTierPart]]$tip.label) #this is a list of all the taxa that are in the clade of interest in the lowered tier
@@ -406,7 +248,7 @@ evaluateNodeSupport<-function(
     
     ###Check if this node label has been used before
     if(is.element(getMRCA(allTierTrees[[lowerTierPart]],unlist(leftoverTaxa)), finishedNodes[lowerTierPart][[1]]
-                  #[!is.na(  finishedNodes[lowerTierPart][[1]])]
+                  
     )
     ){ 
       ###If true, go to the next valid node and repeat
@@ -426,9 +268,6 @@ evaluateNodeSupport<-function(
         #old method, removed feb 7 2023
         #highestTeirTree$node.label[[currentNode-Ntip(highestTeirTree)]]<-useWhichNodeLabel("lower", allTierTrees, lowerTierPart, currentNode, tierLabels[[lowerTierPart-1]], tierLabels[[lowerTierPart]], leftoverTaxa)
         
-        #browser()
-        
-        ###7 Feb 2023: There's a problem I don't quite understand, where the node IDs for the lowertier trees and the highest tier trees are not being indexed in the same way. So, I will use a workaround where, if lowerTierPart==1 I will simply not change the node value, but add on the label to it. While this doesn't solve the fundamental source of the problem, it shouldn't cause an issue with other datasets. So, it may (or may not) be a general solution to the bug
         
         if(lowerTierPart>1){
         highestTeirTree$node.label[[findNodeID(highestTeirTree, leftoverTaxa)]]<-paste(
@@ -440,15 +279,11 @@ evaluateNodeSupport<-function(
             }
         
         
-        
-        
-        
-        
         if(verbose==TRUE) {print(
           paste(
             paste(
               paste("Using tier ",as.character(lowerTierPart)," for label on node")
-              , as.character(currentNode)) #added print line feb 6 2023 to track proper node labelling
+              , as.character(currentNode)) #added print line feb 6 2023 to track proper node labeling
                                  ,as.character(highestTeirTree$node.label[[currentNode-Ntip(highestTeirTree)]]), sep = "->"))} 
         
         cladeLabeled<-TRUE
@@ -469,17 +304,11 @@ evaluateNodeSupport<-function(
         ifelse(is.null(mrca), NA, mrca)
       }
     ))
-  #output
   return(output)
 }
 
 
-
-
-
-
-
-#Determine the order of nodes to evaluate on the higher tree
+#findOrderToTraverseHighestTree: Determine the order of nodes to evaluate on the higher tree
 findOrderToTraverseHighestTree<-function(allTierTrees){
   findTippiestClades(allTierTrees[[1]])
   
@@ -515,10 +344,8 @@ findOrderToTraverseHighestTree<-function(allTierTrees){
 }
 
 
+####totalAwareSupport: is the final wrapper function that evaluates the whole tree. It calls evaluateNodeSupport and loops it over the whole tree. It also keeps track of which nodes have been finished already
 
-#allTierTrees<-allRandomizedTierTrees
-
-#Final wrapper function that evaluates the whole tree.
 totalAwareSupport<-function(allTierTrees, tierNames, supportCutOff = 95, verbose=FALSE, developmentMode=FALSE){
   highestTierTree0<<-allTierTrees[[1]]
   nodeList<-findOrderToTraverseHighestTree(allTierTrees) #find the order to traverse the highest (most inclusive) tree
@@ -545,32 +372,9 @@ totalAwareSupport<-function(allTierTrees, tierNames, supportCutOff = 95, verbose
 }
 
 
-#####Add node support to a tree from another tree
-
-concatNodeLabels<-function(finalTree, sourceTree){
-#get a list of all the nodes to be annotated
-finalTreeNodes<-findOrderToTraverseHighestTree(c(finalTree))
-
-  for(nodeID in finalTreeNodes[-1]){
-    
-    #the corresponding node in the concatenation tree
-    correspondingNodeID<-try(getMRCA(sourceTree, unlist(getDescendantTipNames(finalTree, nodeID))), silent=TRUE)
-    #print(paste(nodeID, correspondingNodeID))
-    #check that the node is monophyletic in the corresponding tree
-    takeNodeValueQ<-checkLowerTierTaxaMonophyly(c(finalTree, sourceTree),  
-                                                unlist(getDescendantTipNames(finalTree,nodeID))
-                                                , 2)
-    ifelse(takeNodeValueQ, 
-           finalTree$node.label[[nodeID-Nnode(finalTree)]]<-paste(finalTree$node.label[[nodeID-Nnode(finalTree)]], #original node support value
-                                                                                sourceTree$node.label[[correspondingNodeID-Ntip(sourceTree)]], sep="|") #new node support value
-           , NA)
-    
-  }
-}
 
 
-
-#####Generate some random test trees
+#####The following functions are not necessary for AwareSupport, but provide a way to generate some random trees where you can test AwareSupport on a small scale to help see what it does. This is also super-useful to use if you are modified the code and want to test your progress on a small, easy tree.
 
 listNodes<-function(phy){
   listOfTips<-phy$tip.label

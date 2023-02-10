@@ -11,7 +11,12 @@ knitr::opts_chunk$set(echo = TRUE)
 
 
 ```{r load SupportAware}
-source("B:/OneDrive - University of Illinois - Urbana/Science/R programs/Roach_brain_Phylos/AwareSupport/node support transfering.R") #path to R source file
+devtools::source_url("https://github.com/dominicev/Roach_brain_Phylos/blob/main/tree%20functions.R") #direct path to R source file
+
+
+#If the above doesn't work, download the files in https://github.com/dominicev/Roach_brain_Phylos/ and call the file "node support transfering.R" using source(). i.e....
+
+source("node support transfering.R") 
 
 ```
 
@@ -42,7 +47,7 @@ Step 1: Import your data
 #import all your trees
 #input the names for your trees (e.g., tier names)
 
-#setwd()#the directory your input files are in. Skip this if you want all your files in the same folder as this R notebook
+setwd()#the directory your input files are in. Skip this if you want all your files in the same folder as this R notebook
 
 listofOutgroups<-c("Outgroup1","Outgroup2")#define the outgroup taxa for your trees. If you most distant outgroup is in all trees then you only need to have a list of one element. Otherwise, make this object a list of multiple outgroups starting from the most distant to the most closely related to the ingroup. If the latter case, the support values in the outgroup (only) will likely not be correct.
 
@@ -63,8 +68,14 @@ tierNames<-c("B", "A")
 Now run AwareSupport to map the node support values
 ```{r}
 
-totalAwareSupport(allTierTrees, tierNames, supportCutOff = 95, verbose=FALSE)
-#supportCutOff should be the node support value defined as the cutoff for your constraints between tiers. 100 is the most conservative. If your cutoff varied per tier you cannot specify that here. I recommend you choose some value intermediate between your actual cutoffs, but the result may not be ideal.
+final<-totalAwareSupport(allTierTrees, tierNames, verbose=FALSE, developmentMode=FALSE)
+
+#changing verbose and development to TRUE will each give you more output information when running the script. Helpful for troubleshooting...otherwise might be unnecessary.
+
+
+write.tree(final[[1]], "B:\\OneDrive - University of Illinois - Urbana\\Projects\\PHY_Blab_2\\bioinformatics\\PhyBlab2 full analysis\\4 - assess-visualize support\\2 - assessing support\\RewrittenNodesupportAndStatus.CDDbest.tre")
+
+
 
 
 ```
