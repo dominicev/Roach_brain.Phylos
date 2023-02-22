@@ -361,9 +361,9 @@ totalAwareSupport<-function(allTierTrees, tierNames, supportCutOff = 95, verbose
     answer<-evaluateNodeSupport(allTierTrees, tierNames, j, nodeIterator, supportCutOff, verbose)
     #browser()
     
-    if(developmentMode==TRUE) {print(paste("Replacing ", as.character(highestTierTree0$node.label[[j-Ntip(highestTeirTree)]]), " with ", as.character(answer[[1]]), sep = ""))}
+    if(developmentMode==TRUE) {print(paste("Replacing ", as.character(highestTierTree0$node.label[[j-Ntip(highestTierTree0)]]), " with ", as.character(answer[[1]]), sep = ""))}
     
-    highestTierTree0$node.label[[j-Ntip(highestTeirTree)]]<-answer[[1]]
+    highestTierTree0$node.label[[j-Ntip(highestTierTree0)]]<-answer[[1]]
     finishedNodes[[1]][[nodeIterator]]<-j #this keeps track of the highest tier nodes annotated
     finishedNodes[[as.numeric(answer[[2]])  ]][[nodeIterator]]<-answer[[3]] #this keeps track which lower tier's nodes have been used
 
