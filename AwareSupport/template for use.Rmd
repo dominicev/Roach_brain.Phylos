@@ -1,7 +1,7 @@
 ---
 title: "AwareSupportTest"
 author: "D. Evangelista"
-date: "2023-01-25"
+date: "2023-02-28"
 output: html_document
 ---
 
@@ -14,7 +14,7 @@ knitr::opts_chunk$set(echo = TRUE)
 devtools::source_url("https://github.com/dominicev/Roach_brain_Phylos/blob/main/tree%20functions.R") #direct path to R source file
 
 
-#If the above doesn't work, download the files in https://github.com/dominicev/Roach_brain_Phylos/ and call the file "node support transfering.R" using source(). i.e....
+#If the above doesn't work, download the files in https://github.com/dominicev/Roach_brain_Phylos/ and call the file "node support transferring.R" using source(). i.e. ...
 
 source("node support transfering.R") 
 
@@ -25,15 +25,23 @@ AwareSupport was designed to take node (bipartition) support values from a backb
 
 It was specifically designed to achieve this when a supertree was built incrementally through multiple "tiers" of concatenation. In the original study (Evangelista et al. 2024) this was done using datasets of increasing quality. Hence, AwareSupport does certain things that are appropriate for this context. As a result, it may not give desired results if applied to another context.
 
-Here's what it does...
-
 Let's say we have three trees with increase taxon sampling
 
 Tree 1 (backbone), Tree 2 (skeleton), Tree 3 (whole)
 
-The backbone-tree has the fewest amount of taxa and the whole-tree has your complete taxon sample. The code will go through each node in your whole-tree and go backwards through each other tree checking if that node was reocvered. It will check the skeleton-tree first. If it finds that bipartition it will check the backbone tree. If it finds it in the backbone tree then it uses the backbone support value. If it doesn't find it in the backbone-tree then it uses the suport value from the skeleton-tree. And if it doesn't find the bipartition in any tree it just keeps the node support value from the whole-tree. Regardless of which tree it chooses the node value for, it will provide an annotation (e.g., "backbone", "skeleton", "whole") for that node value, so you can see which tier the node support value came from. 
+Here's what it does...(default/bipartition mode)
 
-The code traverses the whole-tree from the tips to the root, so it requires a rooted tree. There is a check incorporated to ensure that all nodes in the "whole tree" are evaluated, so it shouldn't miss any.
+The backbone-tree has the fewest amount of taxa and the whole-tree has your complete taxon sample. The code will go through each node in your whole-tree and find the earliest tier in which that bipartition was recovered (regardless of whether it was constrained or not). It will check the earliest tree (e.g., backbone) first. If it finds it in the backbone tree then it uses the backbone support value. If it doesn't find it in the earliest tree then it uses the support value from the next highest tier (i.e., skeleton-tree). And if it doesn't find the bipartition in any tree it just keeps the node support value from the fully sampled tree (whole-tree). Regardless of which tree it chooses the node value for, it will provide an annotation (e.g., "backbone", "skeleton", "whole") for that node value, so you can see which tier the node support value came from.
+
+Here's what it does...(quartet mode)
+
+For each node on the whole-tree, it identifies the quartet relative to that node. We define quartets as having two properties (a) a node surrounded by four taxon clusters, and (b) a bipartition. (a) defines the composition of the quartet and (b) defines the uniqueness of the quartet [i.e., a four cluster taxon set can comprise 3 unique quartets: (1, 2),(3, 4); (1, 3),(2, 4); (1, 4),(2, 3) ]. The four clusters are identified as (i & ii) the two descendants of the node (remember this algorithm only deals with rooted trees), (iii) the sister to the node, and (iv) the remaining taxa. Near (or on) the root, at least one of these will be undefined so we don't deal with those nodes.
+
+After the quartet is identified on a whole-tree node it finds the earliest tier in which that quartet also exists. In order for it to exist it doesn't need to have the EXACT same taxon sampling but it must have at least one taxon from each of the 4 clusters and should have the same bipartition. This is a very strict criteria if the tier trees are very different in terms of taxon sampling, or even slightly different in terms of topology. If the quartet matches then the support values is carried through and annottated properly. If not, the tier is increased and the next trees are checked successively.
+
+The code traverses the whole-tree from the tips to the root, so it requires a rooted tree*. There is a check incorporated to ensure that all nodes in the "whole tree" are evaluated, so it shouldn't miss any. If your final tree is missing a node value, this is most likely a rooting problem (see warning).
+
+*WARNING: Rooting is the key to make or break AwareSupport. If you root your tree with the APE function root() there is a good chance your result will not be correct. Similarly, rooting on other software could cause the same problem. The most fool-proof way to root your trees is to specify the outgroup sometime BEFORE calculating node support for that tree. This is because the process of rerooting a tree with support values can cause two different problems. First, every time you reroot the tree you will lose one support value (for the node at the root) and then the node that was the previous root will be missing a value. Second, sometimes rerooting a tree can cause a single node shift in all the support values on a tree. Needless to say this is VERY bad, and we are not sure exactly when/why it happens.
 
 
 ###Analying your trees
@@ -49,29 +57,29 @@ Step 1: Import your data
 
 setwd()#the directory your input files are in. Skip this if you want all your files in the same folder as this R notebook
 
-listofOutgroups<-c("Outgroup1","Outgroup2")#define the outgroup taxa for your trees. If you most distant outgroup is in all trees then you only need to have a list of one element. Otherwise, make this object a list of multiple outgroups starting from the most distant to the most closely related to the ingroup. If the latter case, the support values in the outgroup (only) will likely not be correct.
-
+dir<-"" #for ease of use, you may define this to be director string for your input files
 
 #imported rooted versions of all your tiers. Repeat for as many tiers as needed
-tier1<-rootIncompleteTree(read.tree(paste(dir,"backbone.treefile", sep="")), listofOutgroups)
-tiern<-rootIncompleteTree(read.tree(paste(dir,"other.treefile", sep="")), listofOutgroups)
+tier1<-read.tree(paste(dir,"backbone.treefile", sep=""))
+tiern<-read.tree(paste(dir,"other.treefile", sep=""))
 
 #list all your tiers from most inclusive (i.e., whole tree) to least inclusive (i.e., backbone tree).
 allTierTrees<-c(tiern, tier1)
 
-#give labels for all your tiers. This list should be the same length as allTierTrees. Shorter labels are better
+#give labels for all your tiers. This list should be the same length as allTierTrees. Single character labels are best but any length should work.
 tierNames<-c("B", "A")
 
 
 ```
 
-Now run AwareSupport to map the node support values
+Now run AwareSupport to map the node support values. This assumes your support values are bipartition support (i.e., traditional bootstraps)
 ```{r}
 
 final<-totalAwareSupport(allTierTrees, tierNames, verbose=FALSE, developmentMode=FALSE)
 
 #changing verbose and development to TRUE will each give you more output information when running the script. Helpful for troubleshooting...otherwise might be unnecessary.
 
+final #Note that the output object is a list of two elements. 1. The tree and 2. the list of support values recorded for each tier. 
 
 write.tree(final[[1]], "B:\\OneDrive - University of Illinois - Urbana\\Projects\\PHY_Blab_2\\bioinformatics\\PhyBlab2 full analysis\\4 - assess-visualize support\\2 - assessing support\\RewrittenNodesupportAndStatus.CDDbest.tre")
 
@@ -81,6 +89,15 @@ write.tree(final[[1]], "B:\\OneDrive - University of Illinois - Urbana\\Projects
 ```
 
 
+Alternatively, you can process tiered trees with quadripartition (quartet) support. These tend to be less useful in the case of tiered trees with unequal taxon sampling but...hey...why not do it anyway?
+```{r}
+
+finalQ<-totalAwareSupport(allTierTrees, tierNames, mode="quartet")
+
+
+write.tree(finalQ[[1]], "B:\\OneDrive - University of Illinois - Urbana\\Projects\\PHY_Blab_2\\bioinformatics\\PhyBlab2 full analysis\\4 - assess-visualize support\\2 - assessing support\\RewrittenNodesupportAndStatus.CDDbest.tre")
+
+```
 
 
 ###Randomized trees
@@ -118,3 +135,31 @@ plot.phylo(ladderize(mappedTree[[1]]), show.node.label = TRUE)
 ```
 
 
+
+###Combining node support from multiple trees
+For convenience, we also have a function for concatenating node support values from multiple analyses!
+
+```{r}
+
+concatNodeLabels(finalTree, sourceTree)
+
+```
+
+
+
+###Mixing and matching
+Mixing the methods described above could yield interesting, and potentially useful results. Here are some examples of what you might consider:
+
+-Adding an additional "artificial" tier. You might use this if, for example, the final tree you want to present in was a manually grafted version of your "whole-tree". So, the topology is different but the taxa are all the same. You would define *allTierTrees* as *c(tier4, tier3, tier2, tier1, graftedTree)* and *tierNames* should be defined appropriately. This will yield a tree with accurate (but possibly incomplete) node support values. Note that your tree cannot include polytomies with mode = "quartet"
+
+-Removing later tier trees in "quartet mode". Since adding taxa to later tiers can obscure some quartets from appearing in the final support-mapped tree you might consider checking what the support looks like on a less-completely sampled tree. This would yield accurate (and possibly highly informative) support values on an incompletely sampled tree.
+
+-Combining multiple methods of tree inference. In Evangelista et al. (2014) we did a 4 tiered concatenation analysis. Our 4th, "whole-tree", tier used maximal taxon sampling but with poor quality data. We also did a fully-sampled ASTRAL analysis with ASTRAL node support values. One could argue that the ASTRAL node support values were perhaps more informative than the support values from our "whole-tree" analysis. We could have added them to the final concatenation tree by defining *allTierTrees* as *c(tier4, tier3, tier2, ASTRALTree, tier1)* and doing *totalAwareSupport* in default mode, as long as *tierNames* was defined appropriately. Arguably, this would have yielded a tree with more informative node support, but it would have been messy to interpret. Also, since the ASTRAL tree had a different toplogy, many node support values would be missing.
+
+-Combining other types of "ranked" super trees. Given the plethora of different ways supertrees could be related to one another, we aren't sure if this would ALWAYS make sense. Presumably, you can figure that out for yourself. If you think it's useful for your non-tiered phylogenetic inference let us know, because we're curious.
+
+-Use *concatNodeLabels* first and THEN use *totalAwareSupport*. Since the numeric value of the support doesn't factor into how *totalAwareSupport* works it doesn't matter how long the node label string is. It will still work. Will the final tree's support values make sense? Well...try it and find out.
+
+###What's missing
+
+A convenient plotting function for AwareSupport node values. We made our figures manually. Sorry.

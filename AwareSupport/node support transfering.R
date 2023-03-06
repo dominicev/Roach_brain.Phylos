@@ -10,8 +10,9 @@ library(TreeTools)
 library(RRphylo)
 library(devtools)
 library(ips)
-#source("B:/OneDrive - University of Illinois - Urbana/Science/R programs/Roach_brain_Phylos/tree functions.R") #use this to load the dependency script locally
-devtools::source_url("https://github.com/dominicev/Roach_brain_Phylos/blob/main/tree%20functions.R")
+library(combinat)
+source("B:/OneDrive - University of Illinois - Urbana/Science/R programs/Roach_brain_Phylos/tree functions.R") #use this to load the dependency script locally
+#devtools::source_url("https://github.com/dominicev/Roach_brain_Phylos/blob/main/tree%20functions.R")
 
 
 #troubleshooting options
@@ -21,6 +22,204 @@ devtools::source_url("https://github.com/dominicev/Roach_brain_Phylos/blob/main/
 ###################################
 #######Dependency functions########
 ###################################
+
+
+
+#####getQuartet: returns a list of four taxon clusters that define the quartet on the given node number#####
+getQuartet<-function(phylo, nodeN = phylo$Ntips+1 ){
+  isNodeNA<-is.na(nodeN)
+  
+  quartetTaxaForChecking<-c(unlist(getDescendantTipNames(phylo, nodeN) ), unlist(getDescendantTipNames(phylo,Siblings(phylo, nodeN))))
+  
+  isNodeNA<-length(quartetTaxaForChecking)==Ntip(phylo)#this corresponds to the condition where the node is so close to the root that the clusters will not all yield the right number
+  
+  if(isNodeNA){quartets<-NA}
+  
+  if(isNodeNA==FALSE){
+    #1. identify the node of interest
+    
+      #nodeN = the node of interest
+    
+    #2. identify the descendents (2/4 quartets)
+    
+      q1n2<-Children(phylo, nodeN)
+      
+      q1<-getDescendantTipNames(phylo, q1n2[[1]])
+      q2<-getDescendantTipNames(phylo, q1n2[[2]])
+    
+    #3. identify the sister to that node (1/4 quartets)
+    
+      q3n<-Siblings(phylo, nodeN)
+      q3<-getDescendantTipNames(phylo, q3n)
+    
+    
+    #4. identify the remaining taxa (remaining quartet)
+    
+      nonFourthQuartetTaxa<-unlist(c(q1, q2, q3))
+      q4<-setdiff(phylo$tip.label, nonFourthQuartetTaxa)
+      
+    #5. put them together in a list of length 4
+    
+      quartets<-c(q1, q2, q3)
+      quartets[[4]]<-q4
+  }
+  return(quartets)
+  
+}
+
+
+#####findPossibleLowerQuartets: returns a list of node numbers of the possible node on the lowerTierTree that could be where the quartet falls on that tree. They still need to be checked for validity#####
+
+
+findPossibleLowerQuartets<-function(quartetFromTreeHIGHER, lowerTierTree){
+  isQuartetNA<-is.na(quartetFromTreeHIGHER)[[1]]
+  temp<-NA
+  
+  if(isQuartetNA==FALSE){
+  reducedQuartHigher<-c()
+    for(quart in 1:4){
+      reducedQuartHigher[[quart]]<-intersect(quartetFromTreeHIGHER[[quart]],lowerTierTree$tip.label) 
+      
+    }
+    
+    
+    possibleNodes<-c(
+      getMRCA(lowerTierTree, c(reducedQuartHigher[[1]], reducedQuartHigher[[2]])),
+      getMRCA(lowerTierTree, c(reducedQuartHigher[[1]], reducedQuartHigher[[1]])),
+      getMRCA(lowerTierTree, c(reducedQuartHigher[[2]], reducedQuartHigher[[2]])),
+      getMRCA(lowerTierTree, c(reducedQuartHigher[[1]], reducedQuartHigher[[3]])),
+      getMRCA(lowerTierTree, c(reducedQuartHigher[[2]], reducedQuartHigher[[3]])),
+      getMRCA(lowerTierTree, c(reducedQuartHigher[[3]], reducedQuartHigher[[3]])),
+      getMRCA(lowerTierTree, c(reducedQuartHigher[[4]], reducedQuartHigher[[4]])),
+      getMRCA(lowerTierTree, c(reducedQuartHigher[[4]], reducedQuartHigher[[1]])),
+      getMRCA(lowerTierTree, c(reducedQuartHigher[[4]], reducedQuartHigher[[2]])),
+      getMRCA(lowerTierTree, c(reducedQuartHigher[[4]], reducedQuartHigher[[3]])),
+      
+      getMRCA(lowerTierTree, c(reducedQuartHigher[[4]], reducedQuartHigher[[3]], reducedQuartHigher[[2]])),
+      getMRCA(lowerTierTree, c(reducedQuartHigher[[4]], reducedQuartHigher[[3]], reducedQuartHigher[[1]])),
+      getMRCA(lowerTierTree, c(reducedQuartHigher[[3]], reducedQuartHigher[[2]], reducedQuartHigher[[1]])),
+      getMRCA(lowerTierTree, c(reducedQuartHigher[[4]], reducedQuartHigher[[2]], reducedQuartHigher[[1]])),
+      
+      getMRCA(lowerTierTree, c(reducedQuartHigher[[4]], reducedQuartHigher[[3]], reducedQuartHigher[[2]], reducedQuartHigher[[1]]))
+    )
+    
+    possibleNodes<-sort(union(possibleNodes, possibleNodes))
+    
+    #this next part removes the root from the list of possible quartets
+    
+    removeRoot<-function(x){
+      temp<-ifelse(length(unlist(getDescendantTipNames(lowerTierTree, x)))<Ntip(lowerTierTree), x, NA)
+      return(temp)
+    }
+    
+    temp<-unlist(lapply(possibleNodes,removeRoot))
+    temp<-temp[!is.na(temp)]
+    
+    ifelse(length(temp)<1, temp<-NA, temp)
+  }
+  
+  return(temp )
+}
+
+#####bipartitionMatchQ: returns TRUE if the descending partitions are the same across trees#####
+bipartitionMatchQ<-function(nodeHighierTier, nodeLowerTier, highestTeirTree, lowerTierTree){
+  
+  cladeTaxaLower<-sort(unlist(getDescendantTipNames(lowerTierTree, nodeLowerTier)))
+  cladeTaxaHigher<-sort(unlist(getDescendantTipNames(highestTeirTree, nodeHighierTier)))
+  reducedCladeTaxaHigher<-intersect(cladeTaxaHigher, lowerTierTree$tip.label)
+  
+  return(
+    sum(cladeTaxaLower%in%reducedCladeTaxaHigher)==length(cladeTaxaLower%in%reducedCladeTaxaHigher)&&sum(reducedCladeTaxaHigher%in%cladeTaxaLower)==length(reducedCladeTaxaHigher%in%cladeTaxaLower)
+  )
+}
+
+
+#####quartetClusterMatchQ: returns TRUE if the two sets of quartet clusters correspond to one another#####
+quartetClusterMatchQ<-function(quartetFromTreeHIGHER, quartetFromTreeLOWER, highestTeirTree, lowerTierTree){
+  skipEverything<-FALSE
+  if(is.na(quartetFromTreeLOWER)[[1]]){
+    skipEverything<-TRUE
+    quartetMatches<-FALSE}
+  if(skipEverything==FALSE){
+  
+      #First, see if their are lower tier taxa in all quartets
+      
+      lowerTaxa<-lowerTierTree$tip.label
+      higherTaxa<-highestTeirTree$tip.label
+      answer10<-c()
+      
+      #quart<-3
+      for(quart in 1:4){
+        answer10[[quart]]<-ifelse(length(
+          intersect(quartetFromTreeHIGHER[[quart]], lowerTierTree$tip.label) #we check the lower tier taxa against the highest tier tree
+        )>=1, TRUE, FALSE) 
+        
+      }
+      
+      ifelse(sum(unlist(answer10))<4, quartetMatches<-FALSE, quartetMatches<-TRUE)
+      
+      if(quartetMatches==TRUE){
+        
+        #Now, reduce the higher tier quartet down to ONLY taxa from the lower tier tree
+        
+        reducedQuartHigher<-c()
+        for(quart in 1:4){
+          reducedQuartHigher[[quart]]<-intersect(quartetFromTreeHIGHER[[quart]],lowerTierTree$tip.label) 
+          
+        }
+        
+        #Check which quartet in lower tier is equal to the reduced quartet
+        
+        
+        comb24ofReduced<-permn(reducedQuartHigher) #the reduced quartet but all possible permutations of it. We need to use this because we don't know the ordering of the nodes in the lower tier tree
+        
+        #Now we search through all of the permutations of the reduced quartet to see if any of them match the lower tier quartet
+        k<-0
+        quartetFound<-FALSE
+        
+        while(quartetFound==FALSE){
+          k<-k+1
+          #browser()
+          if(sum(
+            lapply(quartetFromTreeLOWER, sort)%in%lapply(comb24ofReduced[[k]], sort)
+          )==4){quartetFound<-TRUE}
+          
+          if(k==24){break}
+        }
+        ifelse(quartetFound==TRUE,quartetMatches<-TRUE, quartetMatches<-FALSE)
+      }
+  }
+  
+  return(quartetMatches)  
+  
+}
+
+#####returnCorrespondingQuartetNode: find the quartet in the first tree and then find the corresponding quartet on the second tree
+
+returnCorrespondingQuartetNode<-function(highierTierTree, lowerTierTree, nodeN){
+  qtet<-getQuartet(highierTierTree, nodeN) #get the higherTierQuartet for node N+4
+  #browser()
+  
+  ifelse(highierTierTree==lowerTierTree,
+         possibleLowerQtet<-nodeN, 
+         possibleLowerQtet<-findPossibleLowerQuartets(qtet, lowerTierTree) ) #list the possible lower tier Quartets
+  
+  ##add a step here to determine which has the same bipartition
+  bMQ<-function(x){bipartitionMatchQ(nodeN, x, highierTierTree, lowerTierTree)}# a shortcut function to determine the suitability of each possible quartet
+  biPartitionMatches<-unlist(lapply(possibleLowerQtet, bMQ))
+  ans8<-biPartitionMatches*possibleLowerQtet
+  answerNode<-ans8[which(ans8>0)]#return the only valid nodes
+  
+  
+  qMQ<-function(x){quartetClusterMatchQ(qtet, getQuartet(lowerTierTree, x), highierTierTree, lowerTierTree)}# a shortcut function to determine the suitability of each possible quartet
+  
+  answers<-unlist(lapply(answerNode, qMQ))#apply the shortcut function over the possible quartet nodes
+  ans9<-(answers*answerNode)
+  answerNode<-ans9[which(ans9>0)]#return the only valid nodes
+  if(length(answerNode)<1){answerNode<-"Node not found"}
+  
+  return(answerNode)
+}
 
 #####getDescendantTipNames: return the names of descendants (tips) of a given node number#####
 getDescendantTipNames<-function(phylo, nodeNum){unname(slice(as.data.frame(phylo$tip.label), unlist(Descendants(phylo, nodeNum, "tips"))))
@@ -308,6 +507,119 @@ evaluateNodeSupport<-function(
 }
 
 
+
+
+####evaluateQuartetNodeSupport: This is the alternative core function of AwareSupport specifically for quartet-based node support measures. This assesses a given node on the highest tier tree.
+
+evaluateQuartetNodeSupport<-function(
+    allTierTrees, #this object should have the trees in order from highest tier to lowest tier (i.e. most inclusive to least inclusive)
+    tierLabels, #the names of the three trees in the same order as the trees
+    nodeNumber, #the number of the higher tier node we are evaluating
+    nodeIterator,  #an arbitrary sequential iterator used to keep track of where to store the labeled node IDs
+    supportCutOff = 95,
+    verbose = FALSE,
+    developmentMode=FALSE
+){
+  #browser()
+  
+  if(verbose==TRUE) {print(paste("Starting on highest tier tree, node ", as.character(nodeNumber)))}
+  
+  highestTeirTree<-allTierTrees[[1]]
+  numTaxaHigh<-Ntip(highestTeirTree)
+  
+  #Read a single node
+  
+  descTipNames<-getDescendantTipNames(highestTeirTree, nodeNumber)
+  
+  #Quality check 1
+  if(developmentMode==TRUE) {print(ifelse(
+    {length(setdiff(as.list(as.data.frame(highestTeirTree$tip.label)), as.list(descTipNames)))==0}, "Error: This is the root", "Print:QC1 passed" ))
+  }
+  
+  currentNode<-nodeNumber
+  currentCladeTaxa<-getDescendantTipNames(highestTeirTree,currentNode)
+  
+  lowerTierPart<-lowestTierCladeAppearsIn(allTierTrees,currentNode, currentCladeTaxa) #this was originally defined as "2" and then allowed to be adjusted using the workflow below. However, I think this way of doing it is unnecessary.
+  
+  
+  leftoverTaxa<-intersect(unlist(currentCladeTaxa),  allTierTrees[[lowerTierPart]]$tip.label) #this is a list of all the taxa that are in the clade of interest in the lowered tier
+  if(developmentMode==TRUE){print(paste("Lower teir part set to initial value: ", as.character(lowerTierPart)))}
+  
+  cladeLabeled<-FALSE #set this to FALSE so that when this is evaluated I can exit the loop when the clade is correctly labeled
+  
+  
+  while(cladeLabeled==FALSE){
+    
+    cladeAlreadyLabelled<-TRUE
+    while(cladeAlreadyLabelled==TRUE){
+      #1. check the validity of the node on the lowest tier 
+      
+      correspondingNode<-"Node not found"
+      
+      while(sum(correspondingNode=="Node not found")==1){
+        #browser()
+        correspondingNode<-returnCorrespondingQuartetNode(allTierTrees[[1]],  allTierTrees[[lowerTierPart]], currentNode)
+        #2. if no valid nodes, then raise tier and repeat
+        
+        if(correspondingNode=="Node not found"&&(allTierTrees[[lowerTierPart]]==highestTeirTree)){correspondingNode<-currentNode}
+        if(correspondingNode=="Node not found"){lowerTierPart<-lowerTierPart-1}
+      }#end of checking proper quartet nodes
+      
+      #3. check if node label has been previously used, if so, then raise node label and repeat
+      
+      #browser()
+      cladeAlreadyLabelled<-is.element(getMRCA(allTierTrees[[lowerTierPart]],unlist(leftoverTaxa)), finishedNodes[lowerTierPart][[1]])
+    }#end of checking if clade is already labelled
+    #4. output the node label 
+    
+    if(developmentMode==TRUE) {print("Target value found...using label on node")} 
+    
+    #record that we're labeling this node
+    finishedNodes[[lowerTierPart]][[nodeIterator]]<-getMRCA(allTierTrees[[lowerTierPart]],unlist(leftoverTaxa))
+    
+    #old method, removed feb 7 2023
+    #highestTeirTree$node.label[[currentNode-Ntip(highestTeirTree)]]<-useWhichNodeLabel("lower", allTierTrees, lowerTierPart, currentNode, tierLabels[[lowerTierPart-1]], tierLabels[[lowerTierPart]], leftoverTaxa)
+    
+    
+    if(lowerTierPart>1){
+      highestTeirTree$node.label[[findNodeID(highestTeirTree, leftoverTaxa)]]<-paste(
+        allTierTrees[[lowerTierPart]]$node.label[[
+          findNodeID(allTierTrees[[lowerTierPart]], leftoverTaxa)#this part of the finished nodes list, which was just defined above, should have the nodeID for the label we want to use
+        ]], tierLabels[[lowerTierPart]], sep="/")}else{
+          
+          highestTeirTree$node.label[[findNodeID(highestTeirTree, leftoverTaxa)]]<- paste(highestTeirTree$node.label[[findNodeID(highestTeirTree, leftoverTaxa)]], tierLabels[[1]], sep="/")
+        }
+    
+    
+    if(verbose==TRUE) {print(
+      paste(
+        paste(
+          paste("Using tier ",as.character(lowerTierPart)," for label on node")
+          , as.character(currentNode)) #added print line feb 6 2023 to track proper node labeling
+        ,as.character(highestTeirTree$node.label[[currentNode-Ntip(highestTeirTree)]]), sep = "->"))} 
+    
+    cladeLabeled<-TRUE
+    
+    
+  }#End of QC Check 3 part
+  
+  
+  output<-unlist(
+    c(
+      highestTeirTree$node.label[[currentNode-Ntip(highestTeirTree)]],
+      unlist(lowerTierPart[[1]]), 
+      
+      {
+        mrca<-getMRCA(allTierTrees[[lowerTierPart]],intersect(leftoverTaxa, allTierTrees[[lowerTierPart]]$tip.label))
+        ifelse(is.null(mrca), NA, mrca)
+      }
+    ))
+  return(output)
+}
+
+
+
+
 #findOrderToTraverseHighestTree: Determine the order of nodes to evaluate on the higher tree
 findOrderToTraverseHighestTree<-function(allTierTrees){
   findTippiestClades(allTierTrees[[1]])
@@ -346,7 +658,10 @@ findOrderToTraverseHighestTree<-function(allTierTrees){
 
 ####totalAwareSupport: is the final wrapper function that evaluates the whole tree. It calls evaluateNodeSupport and loops it over the whole tree. It also keeps track of which nodes have been finished already
 
-totalAwareSupport<-function(allTierTrees, tierNames, supportCutOff = 95, verbose=FALSE, developmentMode=FALSE){
+totalAwareSupport<-function(allTierTrees, tierNames, mode = "bipartition", supportCutOff = 95, verbose=FALSE, developmentMode=FALSE){
+
+  if(mode=="bipartition"){print("Assuming bipartition suppport values (e.g., traditional bootstrap)")}
+  
   highestTierTree0<<-allTierTrees[[1]]
   nodeList<-findOrderToTraverseHighestTree(allTierTrees) #find the order to traverse the highest (most inclusive) tree
   nodeIterator<-0
@@ -358,7 +673,10 @@ totalAwareSupport<-function(allTierTrees, tierNames, supportCutOff = 95, verbose
     nodeIterator<-nodeIterator+1
     ifelse(is.element(j, finishedNodes[[1]]), print("Error: Annotating higher tier tree node twice"), if(developmentMode==TRUE) {print("QC Check 2: Good")} else print("...") )#this checks the highest tier tree (the one we are putting support values onto) and checking that it hasn't already been annotated
     
-    answer<-evaluateNodeSupport(allTierTrees, tierNames, j, nodeIterator, supportCutOff, verbose)
+
+    if(mode=="bipartition"){answer<-evaluateNodeSupport(allTierTrees, tierNames, j, nodeIterator, supportCutOff, verbose)}else{
+    if(mode=="quartet"||mode=="quadripartition"){answer<-evaluateQuartetNodeSupport(allTierTrees, tierNames, j, nodeIterator, supportCutOff, verbose)}else{print("Invalide mode. Use either bipartition or quartet.")}
+      }
     #browser()
     
     if(developmentMode==TRUE) {print(paste("Replacing ", as.character(highestTierTree0$node.label[[j-Ntip(highestTierTree0)]]), " with ", as.character(answer[[1]]), sep = ""))}
