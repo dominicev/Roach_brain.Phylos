@@ -607,7 +607,7 @@ rSPRNew <- function(tree, N) {
   # Perform up to N SPR moves
   for (i in 1:N) {
     # Perform a single SPR move
-    tree <- SPRMoves(tree)
+    tree <- SPR(tree)
     
     # Force the tree to be binary
     tree <- multi2di(collapse.singles(tree))
@@ -619,4 +619,59 @@ rSPRNew <- function(tree, N) {
   }
   
   return(tree)
+}
+
+
+
+
+#####FUNCTIONS#####
+##A function to calculate external to internal branch length differences##
+leafiness<-function(phy, method="median"){
+  if(class(phy)=="phylo"){tree=phy}else{tree=read.tree(phy)}
+  
+  allD=dist.nodes(tree)
+  internalDs<-allD[(length(tree[[4]])+1):(length(tree[[2]])+1),(length(tree[[4]])+1):(length(tree[[2]])+1)]
+  #totalDs=allD[1:length(tree[[4]]), 1:length(tree[[4]])]
+  
+  allLeafdists<-foreach(i=1:length(tree[[4]]))%do%{
+    
+    #fir=tree[[4]][[i]]
+    sec=getSisters(tree,tree[[4]][[i]],mode="number" )[[1]]
+    mrca=getMRCA(tree,c(i, sec)  )#this returns the node number at the base of the specified tip by finding the shared node between the tip and it's sister taxon
+    dist.nodes(tree)[i,mrca]
+  }
+  switch(method,  
+         mean=mean(unlist(allLeafdists))/mean(internalDs), #the ratio of external to internal branch lengths
+         median=median(unlist(allLeafdists))/median(internalDs)
+  )
+}
+
+
+leafiness2 <- function(phy, method="median") {
+  if(class(phy) == "phylo") { tree = phy } else { tree = read.tree(phy) }
+  allD = dist.nodes(tree)
+  len4 = length(tree[[4]])
+  len2 = length(tree[[2]])
+  internalDs <- allD[(len4 + 1):(len2 + 1), (len4 + 1):(len2 + 1)]
+  
+  allLeafdists <- foreach(i = 1:len4) %do% {
+    sec = getSisters(tree, tree[[4]][[i]], mode="number")[[1]]
+    mrca = getMRCA(tree, c(i, sec))
+    dist.nodes(tree)[i, mrca]
+  }
+  
+  leaf_dists = unlist(allLeafdists)
+  switch(method,  
+         mean = mean(leaf_dists) / mean(internalDs),
+         median = median(leaf_dists) / median(internalDs)
+  )
+}
+
+
+
+##A function to calculate internal to external branch length ratio##
+#aka the inverse of the above function
+
+steminess<-function(phy, method="median"){
+  1/leafiness(phy, method)
 }
