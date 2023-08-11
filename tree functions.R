@@ -549,6 +549,88 @@ concatNodeLabels<-function(finalTree, sourceTree){
 
 
 
+###The above - modified by GPT4
+concatNodeLabels <- function(finalTree, sourceTree) {
+  # Get a list of all the nodes to be annotated
+  finalTreeNodes <- findOrderToTraverseHighestTree(c(finalTree))
+  
+  for(nodeID in finalTreeNodes[-1]) {
+    # The corresponding node in the concatenation tree
+    correspondingNodeID <- try(getMRCA(sourceTree, unlist(getDescendantTipNames(finalTree, nodeID))), silent = TRUE)
+    
+    # Check that the node is monophyletic in the corresponding tree
+    takeNodeValueQ <- checkLowerTierTaxaMonophyly(c(finalTree, sourceTree), unlist(getDescendantTipNames(finalTree, nodeID)), 2)
+    
+    ifelse(takeNodeValueQ, 
+           finalTree$node.label[[nodeID - Nnode(finalTree)]] <- paste(finalTree$node.label[[nodeID - Nnode(finalTree)]], # Original node support value
+                                                                      sourceTree$node.label[[correspondingNodeID - Ntip(sourceTree)]], sep = "|") # New node support value
+           , NA)
+  }
+  
+  return(finalTree) # Return the modified tree
+}
+
+
+###the above written from scratch by GPT 4
+concatNodeLabels3 <- function(tree1, tree2) {
+  # Iterate through the nodes of tree1
+  for (node in (Ntip(tree1) + 1):(Ntip(tree1) + Nnode(tree1))) {
+    # Get the descendant tips for the current node in tree1
+    tips1 <- tree1$tip.label[getDescendants(tree1, node)]
+    
+    # Find the corresponding node in tree2
+    corresponding_node <- NA
+    for (node2 in (Ntip(tree2) + 1):(Ntip(tree2) + Nnode(tree2))) {
+      tips2 <- tree2$tip.label[getDescendants(tree2, node2)]
+      if (all(tips1 %in% tips2) && all(tips2 %in% tips1)) {
+        corresponding_node <- node2
+        break
+      }
+    }
+    
+    # If a corresponding node is found, concatenate the node labels
+    if (!is.na(corresponding_node)) {
+      tree1$node.label[node - Ntip(tree1)] <- paste(tree1$node.label[node - Ntip(tree1)], tree2$node.label[corresponding_node - Ntip(tree2)], sep = "|")
+    }
+  }
+  
+  return(tree1) # Return the modified tree1
+}
+
+
+
+###the above written by GPT 4 to be faster
+concatNodeLabelsFAST <- function(tree1, tree2) {
+  # Precompute descendants for both trees
+  descendants1 <- lapply((Ntip(tree1) + 1):(Ntip(tree1) + Nnode(tree1)), function(node) tree1$tip.label[getDescendants(tree1, node)])
+  descendants2 <- lapply((Ntip(tree2) + 1):(Ntip(tree2) + Nnode(tree2)), function(node) tree2$tip.label[getDescendants(tree2, node)])
+  
+  # Iterate through the nodes of tree1
+  for (node in seq_along(descendants1)) {
+    tips1 <- descendants1[[node]]
+    
+    # Find the corresponding node in tree2
+    corresponding_node <- which(sapply(descendants2, function(tips2) all(tips1 %in% tips2) && all(tips2 %in% tips1)))
+    
+    node1 <- node + Ntip(tree1)
+    
+    # If a corresponding node is found, concatenate the node labels
+    if (length(corresponding_node) > 0) {
+      node2 <- corresponding_node + Ntip(tree2)
+      tree1$node.label[node1 - Ntip(tree1)] <- paste(tree1$node.label[node1 - Ntip(tree1)], tree2$node.label[node2 - Ntip(tree2)], sep = "|")
+    } else {
+      # If no corresponding node is found, add "NA"
+      tree1$node.label[node1 - Ntip(tree1)] <- paste(tree1$node.label[node1 - Ntip(tree1)], "NA", sep = "|")
+    }
+  }
+  
+  return(tree1) # Return the modified tree1
+}
+
+
+
+
+
 ###This is a custom function that evaluates input that looks like Mathematica's Table function and provides a similar output style, but in R!
 
 tableW <- function(expr, var_list) {
@@ -623,8 +705,6 @@ rSPRNew <- function(tree, N) {
 
 
 
-
-#####FUNCTIONS#####
 ##A function to calculate external to internal branch length differences##
 leafiness<-function(phy, method="median"){
   if(class(phy)=="phylo"){tree=phy}else{tree=read.tree(phy)}
@@ -675,3 +755,41 @@ leafiness2 <- function(phy, method="median") {
 steminess<-function(phy, method="median"){
   1/leafiness(phy, method)
 }
+
+
+
+
+#This function takes a multiPhylo object as input, compares all the node support values and 
+#returns a single phylo object that has the highest of all the node values (across multiple
+#trees) on each node. Made by GPT4
+
+
+
+getHighestNodeValues <- function(multi_trees) {
+  # Check if the input is a multiPhylo object
+  if (!inherits(multi_trees, "multiPhylo")) {
+    stop("Input must be a multiPhylo object")
+  }
+  
+  # Check that all trees have the same topology
+  base_edges <- multi_trees[[1]]$edge
+  if (any(sapply(multi_trees[-1], function(tree) !identical(tree$edge, base_edges)))) {
+    stop("All trees must have the same topology")
+  }
+  
+  # Use the first tree as the base
+  result_tree <- multi_trees[[1]]
+  
+  # Iterate through the nodes
+  for (node in 1:Nnode(result_tree)) {
+    # Get the node values for the current node across all trees
+    node_values <- sapply(multi_trees, function(tree) as.numeric(tree$node.label[node]))
+    
+    # Set the node value in the result tree to the highest value
+    result_tree$node.label[node] <- max(node_values, na.rm = TRUE)
+  }
+  
+  return(result_tree)
+}
+
+                                    
