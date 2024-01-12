@@ -684,6 +684,55 @@ reciprocalTreeTrim <- function(tree1, tree2) {
 }
 
 
+
+# Code generated on 2023-09-01 by GPT-4
+reciprocalTreeTrimMulti <- function(tree1, tree2) {
+  # Initialize variables
+  is_multiPhylo_tree1 <- inherits(tree1, "multiPhylo")
+  is_multiPhylo_tree2 <- inherits(tree2, "multiPhylo")
+  
+  # Function to drop tips from a single tree
+  dropTipsFromTree <- function(tree, common_tips) {
+    drop_tips <- setdiff(tree$tip.label, common_tips)
+    if (length(drop_tips) > 0 && length(drop_tips) != length(tree$tip.label)) {
+      return(drop.tip(tree, drop_tips))
+    } else if (length(drop_tips) == length(tree$tip.label)) {
+      return(NULL)
+    }
+    return(tree)
+  }
+  
+  # Function to get common tips between a single tree and a multiPhylo object
+  getCommonTipsMulti <- function(tree, multi_tree) {
+    multi_tips <- unique(unlist(lapply(multi_tree, function(x) x$tip.label)))
+    return(intersect(tree$tip.label, multi_tips))
+  }
+  
+  # Handle each combination of multiPhylo and single phylo objects
+  if (is_multiPhylo_tree1 && is_multiPhylo_tree2) {
+    # Handle the case where both are multiPhylo objects (not covered in this example)
+  } else if (is_multiPhylo_tree1) {
+    common_tips <- getCommonTipsMulti(tree2, tree1)
+    tree1 <- lapply(tree1, function(t) dropTipsFromTree(t, common_tips))
+    tree1 <- Filter(Negate(is.null), tree1)
+    tree2 <- dropTipsFromTree(tree2, common_tips)
+  } else if (is_multiPhylo_tree2) {
+    common_tips <- getCommonTipsMulti(tree1, tree2)
+    tree2 <- lapply(tree2, function(t) dropTipsFromTree(t, common_tips))
+    tree2 <- Filter(Negate(is.null), tree2)
+    tree1 <- dropTipsFromTree(tree1, common_tips)
+  } else {
+    common_tips <- intersect(tree1$tip.label, tree2$tip.label)
+    tree1 <- dropTipsFromTree(tree1, common_tips)
+    tree2 <- dropTipsFromTree(tree2, common_tips)
+  }
+  
+  # Return the trimmed trees
+  return(list(tree1, tree2))
+}
+
+
+
 #this function is a wrapper for TreeSearch's SPRMoves. From GPT4
 rSPRNew <- function(tree, N) {
   # Perform up to N SPR moves
