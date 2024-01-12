@@ -13,15 +13,22 @@ library(foreach)
 library(doParallel)
 library(TreeTools)
 library(castor)
+library(devtools)
+
+source_url("https://raw.githubusercontent.com/dominicev/Roach_brain_Phylos/main/createNclusterFile.r")
+source_url("https://raw.githubusercontent.com/dominicev/Roach_brain_Phylos/main/deltaGLS.r")
+source_url("https://raw.githubusercontent.com/dominicev/Roach_brain_Phylos/main/phylo_outlier_trimming.r")
+
 
 ###Unused packages###
 #library(rlist)
     #Unused packages determined by...
     #funchir::stale_package_check('B:/OneDrive - University of Illinois - Urbana/Science/R programs/Roach_brain_Phylos/tree functions.R')
 
-#source("B:\OneDrive - University of Illinois - Urbana\Science\R programs\Roach_brain_Phylos\tree functions.R")
- #use this to load this file into an r book
 
+#use this to load this file into an r book
+#source_url("https://raw.githubusercontent.com/dominicev/Roach_brain_Phylos/main/tree functions.R")
+ 
 ##Reminder: Explanation of subsetting lists/dataframes in R: https://adv-r.hadley.nz/subsetting.html
 
 

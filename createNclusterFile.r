@@ -1,6 +1,5 @@
 ####Function that takes the cluster list and turns it into a cluster file
 # GPT-4 generated code as of April 2023
-# Assuming 'my_list' is your list
 listToClusterFile<-function(listOfClusters, fileName){
   output_lines<-sapply(names(listOfClusters), function(name) {
                     elements <- paste(listOfClusters[[name]], collapse = ", ")
@@ -12,15 +11,10 @@ listToClusterFile<-function(listOfClusters, fileName){
   writeLines(output_lines, paste0(fileName, ".txt"))
 }
   
-listToClusterFile(listOfClusters,"test")
+#listToClusterFile(listOfClusters,"test")
 
 
 ###make cluster file
-
-listOfClusters
-names(listOfClusters)
-str(listOfClusters)
-
 createClusterFile<-function(cladeDataFrame, clusterNames, outputFileName = "unnamed.clusterFile"){
   
   #Initialize list
