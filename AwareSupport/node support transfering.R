@@ -20,8 +20,8 @@ library(combinat)
     #funchir::stale_package_check('B:/OneDrive - University of Illinois - Urbana/Science/R programs/Roach_brain_Phylos/AwareSupport/node support transfering.R')
                    
                    
-source("B:/OneDrive - University of Illinois - Urbana/Science/R programs/Roach_brain_Phylos/tree functions.R") #use this to load the dependency script locally
-#devtools::source_url("https://github.com/dominicev/Roach_brain_Phylos/blob/main/tree%20functions.R")
+#source("B:/OneDrive - University of Illinois - Urbana/Science/R programs/Roach_brain_Phylos/tree functions.R") #use this to load the dependency script locally
+devtools::source_url("https://github.com/dominicev/Roach_brain_Phylos/blob/main/tree%20functions.R")
 
 
 #troubleshooting options
