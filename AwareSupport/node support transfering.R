@@ -22,7 +22,7 @@ library(combinat)
                    
 
 #source("B:/OneDrive - University of Illinois - Urbana/Science/R programs/Roach_brain_Phylos/tree_functions.R") #use this to load the dependency script locally
-devtools::source_url("https://github.com/dominicev/Roach_brain_Phylos/blob/main/tree_functions.R")
+devtools::source_url("https://raw.githubusercontent.com/dominicev/Roach_brain_Phylos/main/tree_functions.R")
 
 #troubleshooting options
 #options(show.error.locations = TRUE)
