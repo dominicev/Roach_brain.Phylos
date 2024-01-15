@@ -37,6 +37,7 @@ createClusterFile<-function(cladeDataFrame, clusterNames, outputFileName = "unna
     print("All taxa accounted for. Not ignoring anything.")
   } else {
     # If False, turn into ignore line
+    print("Ignoring taxa not specified...")
     taxa2Ignore <- setdiff(tree$tip.label, unlist(listOfClusters))
     listOfClusters[[length(listOfClusters) + 1]] <- taxa2Ignore
     names(listOfClusters[[length(listOfClusters)]]) <- NULL
