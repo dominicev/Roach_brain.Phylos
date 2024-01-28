@@ -30,6 +30,7 @@ deltaGLS<-function(clusterFileName, treeHypotheses, genesDirectory, GTs = c()){
     #if not, then find the valid files...which takes sometime
     print("Finding which alignments are valid (this will take a while...particularly if you have more than 200 alignments)")
     validGenes<-foreach(i = 1:length(GTs), .combine = "c", .packages=c('ape', 'phangorn'))%do%{
+      print(GTs[[i]])
       checkGeneValidity(GTs[[i]],genesDirectory )}
     write.csv(validGenes, file="validGenes.csv")
     
@@ -109,28 +110,88 @@ checkGeneValidity<-function(fileName, directory){
   return(temp)
 }
 
-#dependency function for calculatng a single set of GLS (gene likelihood scores)
-singleGLS<-function(geneName,treeHypotheses, directory ){
+#OLD VERSION#dependency function for calculatng a single set of GLS (gene likelihood scores)
+#singleGLS<-function(geneName,treeHypotheses, directory ){
+#  
+#  #load the gene data and convert it to a phyDat object
+#  geneData<-as.phyDat(read.dna(paste(directory, "\\", 
+#                                     paste(    strsplit(    geneName, split="\\.")[[1]][1]    , "fasta", sep=".")
+#                                     , sep=""), format = "fasta"))
+#  
+#  #find taxa that are in the alignment but not the tree and drop them from the tree. If there are taxa in the alignment that aren't in the tree then this will not work.
+#  validTaxa<-intersect(names(geneData), treeHypotheses[[1]]$tip.label)
+#  taxaToDrop<-setdiff(treeHypotheses[[1]]$tip.label, validTaxa)
+#  
+# 
+#  #calculate the lnL of the gene data given the tree.
+#  {lnLs<-c()
+#    for(tree in 1:length(treeHypotheses)){
+#      lnL<-pml(drop.tip(treeHypotheses[[tree]], taxaToDrop), data=geneData, bf="empirical", model = "GTR", site.rate = "gamma")
+#      lnLs[tree]<-lnL$logLik
+#    }
+#    lnLs
+#  }
+#}
+
+
+
+singleGLS <- function(geneName, treeHypotheses, directory) {
   
-  #load the gene data and convert it to a phyDat object
-  geneData<-as.phyDat(read.dna(paste(directory, "\\", 
-                                     paste(    strsplit(    geneName, split="\\.")[[1]][1]    , "fasta", sep=".")
-                                     , sep=""), format = "fasta"))
+  # Load the gene data
+  geneFilePath <- paste(directory, "/", paste(strsplit(geneName, split="\\.")[1], "fasta", sep="."), sep="")
+  geneData <- read.dna(geneFilePath, format = "fasta")
   
-  #find taxa that are in the alignment but not the tree and drop them from the tree. If there are taxa in the alignment that aren't in the tree then this will not work.
-  validTaxa<-intersect(names(geneData), treeHypotheses[[1]]$tip.label)
-  taxaToDrop<-setdiff(treeHypotheses[[1]]$tip.label, validTaxa)
+  # Determine if the data is nucleotide or amino acid
+  isNucleotide <- all(toupper(geneData) %in% c("A", "C", "G", "T", "-", "N", "?"))
   
-  
-  #calculate the lnL of the gene data given the tree.
-  {lnLs<-c()
-    for(tree in 1:length(treeHypotheses)){
-      lnL<-pml(drop.tip(treeHypotheses[[tree]], taxaToDrop), data=geneData, bf="empirical", model = "GTR", site.rate = "gamma")
-      lnLs[tree]<-lnL$logLik
-    }
-    lnLs
+  # Convert gene data to phyDat object
+  if (isNucleotide) {
+    geneData <- as.phyDat(geneData, type="DNA")
+  } else {
+    geneData <- as.phyDat(geneData, type="AA")
   }
+  
+  # Find taxa that are in the alignment but not in the tree and drop them from the tree
+  validTaxa <- intersect(names(geneData), treeHypotheses[[1]]$tip.label)
+  taxaToDrop <- setdiff(treeHypotheses[[1]]$tip.label, validTaxa)
+  
+  # Calculate the lnL of the gene data given the tree
+  lnLs <- c()
+  for (tree in 1:length(treeHypotheses)) {
+    if (isNucleotide) {
+      # Find the best model for nucleotide data
+      model <- modelTest(geneData, tree=drop.tip(treeHypotheses[[tree]], taxaToDrop), model = c("GTR", "SYM"), multicore = TRUE, mc.cores = 3)
+    } else {
+      # Find the best model for amino acid data
+      model <- modelTest(geneData, tree=drop.tip(treeHypotheses[[tree]], taxaToDrop), model=c("JTT", "WAG", "LG", "Dayhoff"), multicore = TRUE, mc.cores = 3)
+    }
+    
+    # Calculate likelihood with the best model
+    lnL <- pml(drop.tip(treeHypotheses[[tree]], taxaToDrop), data = geneData, model = model$bestModel)
+    lnLs[tree] <- lnL$logLik
+  }
+  
+  lnLs
 }
+
+# Usage example
+# singleGLS("gene_name.fasta", list_of_tree_hypotheses, "path/to/directory")
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 #dependency function which loops the above over a set of genes
 
