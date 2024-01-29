@@ -1,3 +1,5 @@
+library(ggplot2)
+library(svglite)
 
 ######deltaGLS (gene likelihood scores) test######
 
@@ -9,9 +11,6 @@
 #treeHypotheses must be a multi.phylo object containing your different topological hypotheses. It will only work if this has between 2 and 4 trees in it. Any more and you need to do multiple runs.
 #genesDirectory the directory where your alignment files are. These must be in fasta format and have the file extension ".fasta"
 #GTs optional
-cluster1[[1]]
-
-allClusters[1, 1]
 
 deltaGLS<-function(clusterFileName, treeHypotheses, genesDirectory, GTs = c()){
   #read cluster file, which must have 4 clusters and one list of taxa to ignore. See example file for format.
@@ -178,18 +177,21 @@ checkGeneValidity <- function(fileName, directory){
 
 singleGLS <- function(geneName, treeHypotheses, directory) {
   
-  # Load the gene data
-  geneFilePath <- paste(directory, "/", paste(strsplit(geneName, split="\\.")[1], "fasta", sep="."), sep="")
-  geneData <- read.dna(geneFilePath, format = "fasta")
+  isDNA <- function(sequence) {
+    all(toupper(sequence) %in% c("A", "C", "G", "T", "N", "-", "?"))
+  }
   
-  # Determine if the data is nucleotide or amino acid
-  isNucleotide <- all(toupper(geneData) %in% c("A", "C", "G", "T", "-", "N", "?"))
+  # Read the file content
+  geneFilePath <- paste(directory, "/", geneName, sep="")
+  fileContent <- readLines(geneFilePath, n = 2)[2]  # Read only the first line to check the sequence type
+  #print(paste("File:", fileName, "First line:", fileContent))
+
   
   # Convert gene data to phyDat object
-  if (isNucleotide) {
-    geneData <- as.phyDat(geneData, type="DNA")
+  if (isDNA(fileContent)) {
+    geneData <- read.phyDat(geneFilePath, format = "fasta", type = "DNA")
   } else {
-    geneData <- as.phyDat(geneData, type="AA")
+    geneData <- read.phyDat(geneFilePath, format = "fasta", type = "AA")
   }
   
   # Find taxa that are in the alignment but not in the tree and drop them from the tree
@@ -199,16 +201,25 @@ singleGLS <- function(geneName, treeHypotheses, directory) {
   # Calculate the lnL of the gene data given the tree
   lnLs <- c()
   for (tree in 1:length(treeHypotheses)) {
-    if (isNucleotide) {
+#    if (isDNA(fileContent)) {
       # Find the best model for nucleotide data
-      model <- modelTest(geneData, tree=drop.tip(treeHypotheses[[tree]], taxaToDrop), model = c("GTR", "SYM"), multicore = TRUE, mc.cores = 3)
-    } else {
+#      model <- modelTest(geneData, tree=drop.tip(treeHypotheses[[tree]], taxaToDrop), model = c("GTR", "SYM"), multicore = TRUE, mc.cores = 3)
+#    } else {
       # Find the best model for amino acid data
-      model <- modelTest(geneData, tree=drop.tip(treeHypotheses[[tree]], taxaToDrop), model=c("JTT", "WAG", "LG", "Dayhoff"), multicore = TRUE, mc.cores = 3)
-    }
-    
+#      attr(geneData, "type")<-"AA"
+#      model <- modelTest(geneData, tree=drop.tip(treeHypotheses[[tree]], taxaToDrop), model="all")
+#    }
+
+  ####Assuming not using the above
+  if(isDNA(fileContent)){
+    predeterminedModel<-"GTR"
+  }else{
+    predeterminedModel<-"Dayhoff"
+    class(as.phyDat(geneData, type = "AA"))
+  }
+  
     # Calculate likelihood with the best model
-    lnL <- pml(drop.tip(treeHypotheses[[tree]], taxaToDrop), data = geneData, model = model$bestModel)
+    lnL <- pml(drop.tip(treeHypotheses[[tree]], taxaToDrop), data = geneData, model = predeterminedModel)
     lnLs[tree] <- lnL$logLik
   }
   
@@ -217,19 +228,6 @@ singleGLS <- function(geneName, treeHypotheses, directory) {
 
 # Usage example
 # singleGLS("gene_name.fasta", list_of_tree_hypotheses, "path/to/directory")
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 
