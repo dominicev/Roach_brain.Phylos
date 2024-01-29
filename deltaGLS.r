@@ -9,15 +9,17 @@
 #treeHypotheses must be a multi.phylo object containing your different topological hypotheses. It will only work if this has between 2 and 4 trees in it. Any more and you need to do multiple runs.
 #genesDirectory the directory where your alignment files are. These must be in fasta format and have the file extension ".fasta"
 #GTs optional
+cluster1[[1]]
 
+allClusters[1, 1]
 
 deltaGLS<-function(clusterFileName, treeHypotheses, genesDirectory, GTs = c()){
   #read cluster file, which must have 4 clusters and one list of taxa to ignore. See example file for format.
   allClusters<-read.delim(clusterFileName, header=FALSE, sep = "=")
-  cluster1<<-c(strsplit(allClusters[1, 1], " +")[[1]][2], lapply(strsplit(allClusters[1, 2], "\t+"), trimws ) )
-  cluster2<<-c(strsplit(allClusters[2, 1], " +")[[1]][2], lapply(strsplit(allClusters[2, 2], "\t+"), trimws ) )
-  cluster3<<-c(strsplit(allClusters[3, 1], " +")[[1]][2], lapply(strsplit(allClusters[3, 2], "\t+"), trimws ) )
-  cluster4<<-c(strsplit(allClusters[4, 1], " +")[[1]][2], lapply(strsplit(allClusters[4, 2], "\t+"), trimws ) )
+  cluster1<<-c(strsplit(allClusters[1, 1], " +")[[1]], lapply(strsplit(allClusters[1, 2], ", "), trimws ) )
+  cluster2<<-c(strsplit(allClusters[2, 1], " +")[[1]], lapply(strsplit(allClusters[2, 2], ", "), trimws ) )
+  cluster3<<-c(strsplit(allClusters[3, 1], " +")[[1]], lapply(strsplit(allClusters[3, 2], ", "), trimws ) )
+  cluster4<<-c(strsplit(allClusters[4, 1], " +")[[1]], lapply(strsplit(allClusters[4, 2], ", "), trimws ) )
   
   taxaToRemove<-c(strsplit(allClusters[5, 1], " +")[[1]][2], lapply(strsplit(allClusters[5, 2], "\t+"), trimws ) )
   
@@ -31,7 +33,9 @@ deltaGLS<-function(clusterFileName, treeHypotheses, genesDirectory, GTs = c()){
     print("Finding which alignments are valid (this will take a while...particularly if you have more than 200 alignments)")
     validGenes<-foreach(i = 1:length(GTs), .combine = "c", .packages=c('ape', 'phangorn'))%do%{
       print(GTs[[i]])
-      checkGeneValidity(GTs[[i]],genesDirectory )}
+      checkGeneValidity(GTs[[i]],genesDirectory )
+      }
+    print("Done checking...writing validGene.csv file")
     write.csv(validGenes, file="validGenes.csv")
     
   })
@@ -98,17 +102,54 @@ deltaGLS<-function(clusterFileName, treeHypotheses, genesDirectory, GTs = c()){
 
 #dependency function for finding alignments that are valid for the hypotheses in question
 #
-checkGeneValidity<-function(fileName, directory){
-  aGT<-read.dna(paste(directory, "\\", fileName, sep=""), format = "fasta")
-  {temp=if(
-    length(intersect(cluster1[[2]], attr(aGT, "dimnames")[[1]]))>=1 && 
-    length(intersect(cluster2[[2]], attr(aGT, "dimnames")[[1]]))>=1 && 
-    length(intersect(cluster3[[2]], attr(aGT, "dimnames")[[1]]))>=1 && 
-    length(intersect(cluster4[[2]], attr(aGT, "dimnames")[[1]]))>=1){
-    fileName}else{NULL}#if true, gene is appropriate for the test
+#checkGeneValidity<-function(fileName, directory){
+#  aGT<-read.dna(paste(directory, "\\", fileName, sep=""), format = "fasta")
+#  {temp=if(
+#    length(intersect(cluster1[[2]], attr(aGT, "dimnames")[[1]]))>=1 && 
+#    length(intersect(cluster2[[2]], attr(aGT, "dimnames")[[1]]))>=1 && 
+#    length(intersect(cluster3[[2]], attr(aGT, "dimnames")[[1]]))>=1 && 
+#    length(intersect(cluster4[[2]], attr(aGT, "dimnames")[[1]]))>=1){
+#    fileName}else{NULL}#if true, gene is appropriate for the test
+#  }
+#  return(temp)
+#}
+
+
+###current newest version below
+
+checkGeneValidity <- function(fileName, directory){
+  # Function to check if a sequence is DNA
+  isDNA <- function(sequence) {
+    all(toupper(sequence) %in% c("A", "C", "G", "T", "N", "-", "?"))
   }
-  return(temp)
+  
+  # Read the file content
+  filePath <- paste(directory, "/", fileName, sep="")
+  fileContent <- readLines(filePath, n = 2)[2]  # Read only the first line to check the sequence type
+  #print(paste("File:", fileName, "First line:", fileContent))
+  
+  # Determine if the file is DNA or AA based on the first sequence
+  if (isDNA(fileContent)) {
+    #print("Detected as DNA")
+    aGT <- read.dna(filePath, format = "fasta")
+  } else {
+    #print("Detected as Protein")
+    aGT <- read.aa(filePath, format = "fasta")
+  }
+  
+  # Check if the gene is valid
+  isValid <- length(intersect(cluster1[[2]], names(aGT))) >= 1 &&
+    length(intersect(cluster2[[2]], names(aGT))) >= 1 &&
+    length(intersect(cluster3[[2]], names(aGT))) >= 1 &&
+    length(intersect(cluster4[[2]], names(aGT))) >= 1
+  
+  #print(paste("Is valid:", isValid))
+  result <- if(isValid) fileName else NULL
+  #print(paste("Result for", fileName, ":", result))
+  return(result)
 }
+
+
 
 #OLD VERSION#dependency function for calculatng a single set of GLS (gene likelihood scores)
 #singleGLS<-function(geneName,treeHypotheses, directory ){
