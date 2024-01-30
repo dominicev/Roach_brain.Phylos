@@ -12,13 +12,26 @@ library(svglite)
 #genesDirectory the directory where your alignment files are. These must be in fasta format and have the file extension ".fasta"
 #GTs optional
 
-deltaGLS<-function(clusterFileName, treeHypotheses, genesDirectory, GTs = c()){
+deltaGLS<-function(clusterFileName, treeHypotheses, genesDirectory, GTs = c(), QtestModels = FALSE){
   #read cluster file, which must have 4 clusters and one list of taxa to ignore. See example file for format.
   allClusters<-read.delim(clusterFileName, header=FALSE, sep = "=")
-  cluster1<<-c(strsplit(allClusters[1, 1], " +")[[1]], lapply(strsplit(allClusters[1, 2], ", "), trimws ) )
-  cluster2<<-c(strsplit(allClusters[2, 1], " +")[[1]], lapply(strsplit(allClusters[2, 2], ", "), trimws ) )
-  cluster3<<-c(strsplit(allClusters[3, 1], " +")[[1]], lapply(strsplit(allClusters[3, 2], ", "), trimws ) )
-  cluster4<<-c(strsplit(allClusters[4, 1], " +")[[1]], lapply(strsplit(allClusters[4, 2], ", "), trimws ) )
+  #cluster1<<-c(strsplit(allClusters[1, 1], " +")[[1]], lapply(strsplit(allClusters[1, 2], ", "), trimws ) )
+  #cluster2<<-c(strsplit(allClusters[2, 1], " +")[[1]], lapply(strsplit(allClusters[2, 2], ", "), trimws ) )
+  #cluster3<<-c(strsplit(allClusters[3, 1], " +")[[1]], lapply(strsplit(allClusters[3, 2], ", "), trimws ) )
+  #cluster4<<-c(strsplit(allClusters[4, 1], " +")[[1]], lapply(strsplit(allClusters[4, 2], ", "), trimws ) )
+  
+  trimTrailingSemicolon <- function(x) {
+    sub(";$", "", x)  # Removes the trailing semicolon if it exists
+  }
+  processCluster <- function(clusterRow) {
+    c(strsplit(allClusters[clusterRow, 1], " +")[[1]], 
+      lapply(strsplit(trimTrailingSemicolon(allClusters[clusterRow, 2]), ", "), trimws))
+  }
+  
+  cluster1 <<- processCluster(1)
+  cluster2 <<- processCluster(2)
+  cluster3 <<- processCluster(3)
+  cluster4 <<- processCluster(4)
   
   taxaToRemove<-c(strsplit(allClusters[5, 1], " +")[[1]][2], lapply(strsplit(allClusters[5, 2], "\t+"), trimws ) )
   
@@ -31,7 +44,7 @@ deltaGLS<-function(clusterFileName, treeHypotheses, genesDirectory, GTs = c()){
     #if not, then find the valid files...which takes sometime
     print("Finding which alignments are valid (this will take a while...particularly if you have more than 200 alignments)")
     validGenes<-foreach(i = 1:length(GTs), .combine = "c", .packages=c('ape', 'phangorn'))%do%{
-      print(GTs[[i]])
+      print(paste(as.character(i), GTs[[i]], sep = ". "))
       checkGeneValidity(GTs[[i]],genesDirectory )
       }
     print("Done checking...writing validGene.csv file")
@@ -51,7 +64,7 @@ deltaGLS<-function(clusterFileName, treeHypotheses, genesDirectory, GTs = c()){
   #now calculate the gene likelihood scores (GLs)  
   startTime<-Sys.time()
   
-  sampleGLs<<-calculateAllGLS(unlist(validGenes), treeHypotheses,genesDirectory )
+  sampleGLs<<-calculateAllGLS(unlist(validGenes), treeHypotheses,genesDirectory, QtestModels )
   
   endTime<-Sys.time()
   timeLength<-endTime-startTime
@@ -130,10 +143,10 @@ checkGeneValidity <- function(fileName, directory){
   # Determine if the file is DNA or AA based on the first sequence
   if (isDNA(fileContent)) {
     #print("Detected as DNA")
-    aGT <- read.dna(filePath, format = "fasta")
+    aGT <- read.phyDat(filePath, format = "fasta", type = "AA")
   } else {
     #print("Detected as Protein")
-    aGT <- read.aa(filePath, format = "fasta")
+    aGT <- read.phyDat(filePath, format = "fasta", type = "AA")
   }
   
   # Check if the gene is valid
@@ -175,7 +188,7 @@ checkGeneValidity <- function(fileName, directory){
 
 
 
-singleGLS <- function(geneName, treeHypotheses, directory) {
+singleGLS <- function(geneName, treeHypotheses, directory, QtestModels = FALSE) {
   
   isDNA <- function(sequence) {
     all(toupper(sequence) %in% c("A", "C", "G", "T", "N", "-", "?"))
@@ -198,30 +211,50 @@ singleGLS <- function(geneName, treeHypotheses, directory) {
   validTaxa <- intersect(names(geneData), treeHypotheses[[1]]$tip.label)
   taxaToDrop <- setdiff(treeHypotheses[[1]]$tip.label, validTaxa)
   
-  # Calculate the lnL of the gene data given the tree
-  lnLs <- c()
-  for (tree in 1:length(treeHypotheses)) {
-#    if (isDNA(fileContent)) {
-      # Find the best model for nucleotide data
-#      model <- modelTest(geneData, tree=drop.tip(treeHypotheses[[tree]], taxaToDrop), model = c("GTR", "SYM"), multicore = TRUE, mc.cores = 3)
-#    } else {
-      # Find the best model for amino acid data
-#      attr(geneData, "type")<-"AA"
-#      model <- modelTest(geneData, tree=drop.tip(treeHypotheses[[tree]], taxaToDrop), model="all")
-#    }
-
-  ####Assuming not using the above
-  if(isDNA(fileContent)){
-    predeterminedModel<-"GTR"
-  }else{
-    predeterminedModel<-"Dayhoff"
-    class(as.phyDat(geneData, type = "AA"))
+  consensusTree<-consensus(treeHypotheses, check.labels = TRUE)
+  
+  if (QtestModels) {
+    tryCatch({
+      if (isDNA(fileContent)) {
+        # Find the best model for nucleotide data
+        modelTestResult <- modelTest(geneData, tree=drop.tip(consensusTree, taxaToDrop), model = c("GTR", "SYM"), multicore = TRUE, mc.cores = 3)
+      } else {
+        # Find the best model for amino acid data
+        attr(geneData, "type") <- "AA"
+        modelTestResult <- modelTest(geneData, tree=drop.tip(consensusTree, taxaToDrop), model = c("JTT", "WAG", "LG", "Dayhoff"))
+      }
+      bestModel <- modelTestResult$bestModel
+    }, error = function(e) {
+      # Fallback to predetermined model in case of an error
+      if (isDNA(fileContent)) {
+        bestModel <- "GTR"
+      } else {
+        bestModel <- "Dayhoff"
+      }
+      print("Using generic model due to error in model testing")
+    })
+  } else {
+    # Default to predetermined models without testing
+    if (isDNA(fileContent)) {
+      bestModel <- "GTR"
+    } else {
+      bestModel <- "Dayhoff"
+    }
+    print("Using generic model as model testing is skipped")
   }
   
-    # Calculate likelihood with the best model
-    lnL <- pml(drop.tip(treeHypotheses[[tree]], taxaToDrop), data = geneData, model = predeterminedModel)
+  
+  
+  # Loop through each tree hypothesis
+  lnLs <- c()
+  for (tree in 1:length(treeHypotheses)) {
+    # Calculate likelihood with the best model or predetermined model
+    lnL <- pml(drop.tip(treeHypotheses[[tree]], taxaToDrop), data = geneData, model = bestModel)
     lnLs[tree] <- lnL$logLik
   }
+  
+  
+  
   
   lnLs
 }
@@ -234,12 +267,12 @@ singleGLS <- function(geneName, treeHypotheses, directory) {
 
 #dependency function which loops the above over a set of genes
 
-calculateAllGLS<-function(genes,treeHypotheses, directory){
+calculateAllGLS<-function(genes,treeHypotheses, directory, QtestModels = FALSE){
   
   allGls<-foreach(gene = 1:length(genes),.combine =  'rbind' , .packages=c("ape", "phangorn"), .export = "singleGLS")%do%
     {
       print(paste(gene," - processing ...",genes[[gene]]))
-      singleGLS(genes[[gene]],treeHypotheses, directory )
+      singleGLS(genes[[gene]],treeHypotheses, directory, QtestModels  )
     }
   
   allGls<-as.data.frame(allGls)

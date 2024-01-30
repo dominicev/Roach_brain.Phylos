@@ -508,4 +508,4 @@ getHighestNodeValues <- function(multi_trees) {
   return(result_tree)
 }
 
-                                    
+
