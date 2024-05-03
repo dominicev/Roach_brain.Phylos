@@ -305,3 +305,227 @@ plotDeltaGls<-function(fileNAme){
   ggsave(file=outfileName, plot=plot)
   
 }
+
+
+
+#######Plot DeltaGLS values against locus stats############################
+#allStats = a dataframe where the first column (named "LocusName") are the names of the loci (without file suffix) and all other columns are the states for that locus. Each column should be named as that stat "e.g., "Rate", "Saturation" etc.
+#directory = the directory where the output of deltaGLS function can be found. Specifically, it needs the files named deltaGLS\\.Hyp.*\\.vs\\.Hyp.*\\.csv which has the deltaGLS values for each locus across two competing hypotheses.
+
+correlateDeltaGLSAndStats <- function(allStats, directory) {
+  
+  setwd(directory)
+  # Get all files with the specified pattern
+  files <- list.files(pattern = "deltaGLS\\.Hyp.*\\.vs\\.Hyp.*\\.csv")
+  #print(as.character(dir()))
+  #file<-files[1]
+ 
+  
+  for (file in files) {
+    # Read the file
+    deltaGLsValues <- read.csv(file)
+    title <- strsplit(file, split="\\.")[[1]][c(2:4)]
+    print(paste0(title, collapse = " "))
+    # Make the locus names match
+    colnames(deltaGLsValues)<-c('loci', 'deltalnL')
+    for(i in 1:length(deltaGLsValues[[1]])){
+      deltaGLsValues[i,]$'loci'<-strsplit( deltaGLsValues[i,]$'loci'  , split="\\.")[[1]][[1]]
+    }
+    
+    #noOutlierData[(noOutlierData < quantile(noOutlierData, 0.01, na.rm = TRUE))] <- median(noOutlierData, na.rm = TRUE)
+    
+    
+    # Merge with allStats (assuming allStats is already defined in the environment)
+    newData<-merge(deltaGLsValues, allStats, by.x = "loci", by.y = "LocusName")
+    
+    
+    
+    # Iterate over each column after the third column
+    for (i in 3:ncol(newData)) {
+      #The next line removes the outlier values from the data so that the correlation isn't driven by a few extreme outliers
+      newData[,i][ newData[,i] < quantile(newData[,i], 0.01, na.rm = TRUE)]<- median(newData[,i], na.rm = TRUE)
+      newData[,i][ newData[,i] > quantile(newData[,i], 0.99, na.rm = TRUE)]<- median(newData[,i], na.rm = TRUE)
+      
+      plotData <- data.frame(deltalnL = newData$deltalnL, Value = newData[, i])
+      print(paste0(as.character(colnames(plotData))))
+      # Create the plot
+      plot <- ggplot(plotData, aes(x=Value, y=deltalnL)) +
+        geom_point(size=.5, color="blue") +
+        geom_smooth(method=lm, color="black") +
+        scale_color_brewer(palette="Dark2") +
+        theme_minimal() +
+        geom_hline(yintercept=0) +
+        stat_regline_equation(label.x=.1, label.y=50) +
+        stat_cor(aes(label=..rr.label..), label.x=.1, label.y=35)
+      
+      colnames(plotData) <- c("deltalnL", colnames(newData)[i])
+      # Save the plot
+      filename <- paste("deltalnL", colnames(newData)[i], title[[1]], title[[2]], title[[3]], "png", sep=".")
+      #print(filename)
+      ggsave(file=filename, plot=plot)
+    }
+  }
+}
+
+
+
+#######Quantitative stats for deltaGLS comparisons############################
+#directory = the directory where the output of deltaGLS function can be found. Specifically, it needs the files named deltaGLS\\.Hyp.*\\.vs\\.Hyp.*\\.csv which has the deltaGLS values for each locus across two competing hypotheses.
+
+comparingOverallDeltaGLSStats <- function(directory) {
+  
+  setwd(directory)
+  # Get all files with the specified pattern
+  files <- list.files(pattern = "deltaGLS\\.Hyp.*\\.vs\\.Hyp.*\\.csv")
+  #print(as.character(dir()))
+  #file<-files[1]
+  
+  results_list <- list()
+ for (file in files) {
+    # Read the file
+    deltaGLsValues <- read.csv(file)
+    title <- strsplit(file, split="\\.")[[1]][c(2:4)]
+    #print(title)
+    # Make the locus names match
+    colnames(deltaGLsValues)<-c('loci', 'deltalnL')
+    
+    for(i in 1:length(deltaGLsValues[[1]])){
+      deltaGLsValues[i,]$'loci'<-strsplit( deltaGLsValues[i,]$'loci'  , split="\\.")[[1]][[1]]
+    }
+    
+    ####Statistical test to see if the mean is different than 0...with outliers
+    normalityTestData<-ks.test(deltaGLsValues$deltalnL, "pnorm", mean(deltaGLsValues$deltalnL), sd(deltaGLsValues$deltalnL)) #if the value is <0.05 then the data differ from normality
+    
+    if(normalityTestData$p.value>0.05){
+      testResult0<-t.test(deltaGLsValues$deltalnL, mu = 0)
+    }else{
+      testResult0<-wilcox.test(deltaGLsValues$deltalnL, mu = 0, paired = FALSE)                  
+    }
+    #str(testResult0)
+    
+    
+    ####Statistical test to see if the mean is different than 0...without outliers
+    noOutlierData<-deltaGLsValues$deltalnL
+    noOutlierData[(noOutlierData < quantile(noOutlierData, 0.01, na.rm = TRUE))] <- median(noOutlierData, na.rm = TRUE)
+    noOutlierData[(noOutlierData > quantile(noOutlierData, 0.99, na.rm = TRUE))] <- median(noOutlierData, na.rm = TRUE)
+    
+    normalityTestData<-ks.test(noOutlierData, "pnorm", mean(noOutlierData), sd(noOutlierData)) #if the value is <0.05 then the data differ from normality
+    
+    
+    if(normalityTestData$p.value>0.05){
+      testResult1<-t.test(noOutlierData, mu = 0)
+    }else{
+      testResult1<-wilcox.test(noOutlierData, mu = 0, paired = FALSE)                  
+    }
+   
+    
+    ####Statistical test to see if the number of genes supporting one hypothesis versus the other is skewed.
+    # Calculate the standard deviation of your dataset
+    std_dev <- sd(deltaGLsValues$deltalnL)
+    # Number of values in your dataset
+    n <- length(deltaGLsValues$deltalnL)
+    # Number of simulations
+    num_simulations <- 1000
+    # Store the count of positive values for each simulation
+    positive_counts <- numeric(num_simulations)
+    # Perform simulations
+    set.seed(123)  # for reproducibility
+    for(i in 1:num_simulations) {
+      simulated_data <- rnorm(n, mean = 0, sd = std_dev)
+      positive_counts[i] <- sum(simulated_data > 0)
+    }
+    
+    # Actual number of positive values in your dataset
+    actual_positives <- sum(deltaGLsValues$deltalnL > 0)
+    # Compare the actual number of positives to the simulated distribution
+    quantile<-sum(actual_positives>positive_counts)/length(positive_counts)
+    if(quantile>=0.5){
+      pvalueNumberOfGenes<-1-quantile
+    }else{pvalueNumberOfGenes<-quantile}
+    
+    
+    ####How many outliers are in support of each hypothesis
+    outliersSupportingFirst<-sum(deltaGLsValues$deltalnL > quantile(deltaGLsValues$deltalnL, 0.95, na.rm = TRUE))###outliers in favor of first HYP
+    outliersSupportingSecond<-sum(deltaGLsValues$deltalnL < quantile(deltaGLsValues$deltalnL, 0.05, na.rm = TRUE))###outliers in favor of second HYP
+    
+    file_results <- c(
+      paste0(title, collapse=" "), # name of comparison
+      if(
+        round(mean(deltaGLsValues$deltalnL), 4)>0 &&
+        round(median(deltaGLsValues$deltalnL), 4)>0 &&
+        round(pvalueNumberOfGenes, 4)<0.050001 &&
+        (round(testResult1$p.value, 4)<0.050001||round(testResult0$p.value, 4)<0.050001)){"First hypothesis has more support"}else{
+          if(round(mean(deltaGLsValues$deltalnL), 4)<0 &&
+             round(median(deltaGLsValues$deltalnL), 4)<0 &&
+             round(pvalueNumberOfGenes, 4)<0.050001&&
+             (round(testResult1$p.value, 4)<0.050001||round(testResult0$p.value, 4)<0.050001)){"Second hypothesis has more support"}else{
+               "Both are supported, or it's complicated"
+               }
+          
+          
+          
+        },#Summary result
+      round(mean(deltaGLsValues$deltalnL), 4), # mean value, rounded
+      round(median(deltaGLsValues$deltalnL), 4), # median value, rounded
+      round(actual_positives/length(deltaGLsValues$deltalnL), 4), # proportion of genes supporting H1, rounded
+      round(pvalueNumberOfGenes, 4), # probability that the number of genes supporting each hypothesis is equal, rounded
+      strsplit(testResult0$method, " ")[[1]][1], # test used to see if mean of deltaGLS values is different than 0...with outliers
+      round(testResult0$p.value, 4), # probability that mean of deltaGLS values is indistinguishable from 0...with outliers, rounded
+      strsplit(testResult1$method, " ")[[1]][1], # test used to see if mean of deltaGLS values is different than 0...without outliers
+      round(testResult1$p.value, 4), # probability that mean of deltaGLS values is indistinguishable from 0...without outliers, rounded
+      outliersSupportingFirst, # number of outlier genes supporting H1
+      outliersSupportingSecond # number of outlier genes supporting H2
+    )
+    
+    results_list[[file]] <- file_results
+    
+    
+ }
+  
+  results_df <- do.call(rbind, lapply(results_list, function(x) as.data.frame(t(x), stringsAsFactors = FALSE)))
+  colnames(results_df) <- c("Hyps_Compared","TestSummary", "MeanlnL", "MedianlnL", "ProportionFavoringFirstHyp", "PValueNumGenes", "TestlnLDist_W.Outliers", "PValueLnLDist.W.Outliers", "TestlnLDist_WO.out.Outliers", "PValueLnLDist.WO.Outliers", "OutliersFirstH", "OutliersSecondH")
+  
+  rownames(results_df)<-NULL
+  
+  # Return the dataframe
+  return(results_df)
+}
+
+
+#######ANOVA to compare deltaGLS values by certain stats############################
+#allStats = a dataframe where the first column (named "LocusName") are the names of the loci (without file suffix) and all other columns are the states for that locus. Each column should be named as that stat "e.g., "Rate", "Saturation" etc.
+#directory = the directory where the output of deltaGLS function can be found. Specifically, it needs the files named deltaGLS\\.Hyp.*\\.vs\\.Hyp.*\\.csv which has the deltaGLS values for each locus across two competing hypotheses.
+#modelFormula = the linear model formula to pass to the aov() function. The variables are the colnames in your allSTats obj An example is: deltalnL ~ Saturation + ASRV 
+
+
+anovaDeltaGLSAndStats <- function(allStats, directory, modelFormula) {
+  setwd(directory)
+  # Get all files with the specified pattern
+  files <- list.files(pattern = "deltaGLS\\.Hyp.*\\.vs\\.Hyp.*\\.csv")
+  
+  anovaResults <- list()
+  
+  for (file in files) {
+    # Read the file
+    deltaGLsValues <- read.csv(file)
+    title <- strsplit(file, split="\\.")[[1]][c(2:4)]
+    label <- paste0(title, collapse = " ")
+    
+    # Make the locus names match
+    colnames(deltaGLsValues) <- c('loci', 'deltalnL')
+    deltaGLsValues$loci <- sapply(deltaGLsValues$loci, function(x) strsplit(x, split="\\.")[[1]][1])
+    
+    newData <- merge(deltaGLsValues, allStats, by.x = "loci", by.y = "LocusName")
+    
+    # Process newData (median replacement, dealing with outliers, etc.)
+    # Your existing code for processing newData goes here
+    
+    # Perform ANOVA using the provided model formula
+    multiFactor <- aov(modelFormula, data = newData)
+    
+    # Store the summary of the ANOVA results with the label
+    anovaResults[[label]] <- summary(multiFactor)
+  }
+  
+  return(anovaResults)
+}

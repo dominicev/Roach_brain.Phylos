@@ -9,7 +9,6 @@ output: html_document
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-
 ```{r load SupportAware}
 devtools::source_url("https://github.com/dominicev/Roach_brain_Phylos/blob/main/tree%20functions.R") #direct path to R source file
 
@@ -20,8 +19,7 @@ source("node support transfering.R")
 
 ```
 
-###Introduction
-AwareSupport was designed to take node (bipartition) support values from a backbone tree and map them onto a "full" tree. It combines support values from two different trees that have overlapping tips. Therefore, the goal is to allow a supertree to have meaningful support values, each of which corresponds to a specific tree (and is annotated with a label denoting the tree it came from).
+###Introduction AwareSupport was designed to take node (bipartition) support values from a backbone tree and map them onto a "full" tree. It combines support values from two different trees that have overlapping tips. Therefore, the goal is to allow a supertree to have meaningful support values, each of which corresponds to a specific tree (and is annotated with a label denoting the tree it came from).
 
 It was specifically designed to achieve this when a supertree was built incrementally through multiple "tiers" of concatenation. In the original study (Evangelista et al. 2024) this was done using datasets of increasing quality. Hence, AwareSupport does certain things that are appropriate for this context. As a result, it may not give desired results if applied to another context.
 
@@ -39,16 +37,13 @@ For each node on the whole-tree, it identifies the quartet relative to that node
 
 After the quartet is identified on a whole-tree node it finds the earliest tier in which that quartet also exists. In order for it to exist it doesn't need to have the EXACT same taxon sampling but it must have at least one taxon from each of the 4 clusters and should have the same bipartition. This is a very strict criteria if the tier trees are very different in terms of taxon sampling, or even slightly different in terms of topology. If the quartet matches then the support values is carried through and annottated properly. If not, the tier is increased and the next trees are checked successively.
 
-The code traverses the whole-tree from the tips to the root, so it requires a rooted tree*. There is a check incorporated to ensure that all nodes in the "whole tree" are evaluated, so it shouldn't miss any. If your final tree is missing a node value, this is most likely a rooting problem (see warning).
+The code traverses the whole-tree from the tips to the root, so it requires a rooted tree\*. There is a check incorporated to ensure that all nodes in the "whole tree" are evaluated, so it shouldn't miss any. If your final tree is missing a node value, this is most likely a rooting problem (see warning).
 
-*WARNING: Rooting is the key to make or break AwareSupport. If you root your tree with the APE function root() there is a good chance your result will not be correct. Similarly, rooting on other software could cause the same problem. The most fool-proof way to root your trees is to specify the outgroup sometime BEFORE calculating node support for that tree. This is because the process of rerooting a tree with support values can cause two different problems. First, every time you reroot the tree you will lose one support value (for the node at the root) and then the node that was the previous root will be missing a value. Second, sometimes rerooting a tree can cause a single node shift in all the support values on a tree. Needless to say this is VERY bad, and we are not sure exactly when/why it happens.
+\*WARNING: Rooting is the key to make or break AwareSupport. If you root your tree with the APE function root() there is a good chance your result will not be correct. Similarly, rooting on other software could cause the same problem. The most fool-proof way to root your trees is to specify the outgroup sometime BEFORE calculating node support for that tree. This is because the process of rerooting a tree with support values can cause two different problems. First, every time you reroot the tree you will lose one support value (for the node at the root) and then the node that was the previous root will be missing a value. Second, sometimes rerooting a tree can cause a single node shift in all the support values on a tree. Needless to say this is VERY bad, and we are not sure exactly when/why it happens.
 
-
-###Analying your trees
-Note: If you don't want to import your own data you can skip to the next section and simply simulate some trees to see how the code works.
+###Analzying your trees Note: If you don't want to import your own data you can skip to the next section and simply simulate some trees to see how the code works.
 
 Step 1: Import your data
-
 
 ```{r Import}
 #set working directory
@@ -73,6 +68,7 @@ tierNames<-c("B", "A")
 ```
 
 Now run AwareSupport to map the node support values. This assumes your support values are bipartition support (i.e., traditional bootstraps)
+
 ```{r}
 
 final<-totalAwareSupport(allTierTrees, tierNames, verbose=FALSE, developmentMode=FALSE)
@@ -88,8 +84,8 @@ write.tree(final[[1]], "B:\\OneDrive - University of Illinois - Urbana\\Projects
 
 ```
 
-
 Alternatively, you can process tiered trees with quadripartition (quartet) support. These tend to be less useful in the case of tiered trees with unequal taxon sampling but...hey...why not do it anyway?
+
 ```{r}
 
 finalQ<-totalAwareSupport(allTierTrees, tierNames, mode="quartet")
@@ -99,9 +95,7 @@ write.tree(finalQ[[1]], "B:\\OneDrive - University of Illinois - Urbana\\Project
 
 ```
 
-
-###Randomized trees
-Testing the code with random trees
+###Randomized trees Testing the code with random trees
 
 ```{r create randomized trees to test}
 ###Now I can create three randomized trees to test AwareSupport on
@@ -134,10 +128,7 @@ plot.phylo(ladderize(mappedTree[[1]]), show.node.label = TRUE)
 
 ```
 
-
-
-###Combining node support from multiple trees
-For convenience, we also have a function for concatenating node support values from multiple analyses!
+###Combining node support from multiple trees For convenience, we also have a function for concatenating node support values from multiple analyses!
 
 ```{r}
 
@@ -145,12 +136,9 @@ concatNodeLabels(finalTree, sourceTree)
 
 ```
 
+###Mixing and matching Mixing the methods described above could yield interesting, and potentially useful results. Here are some examples of what you might consider:
 
-
-###Mixing and matching
-Mixing the methods described above could yield interesting, and potentially useful results. Here are some examples of what you might consider:
-
--Adding an additional "artificial" tier. You might use this if, for example, the final tree you want to present in was a manually grafted version of your "whole-tree". So, the topology is different but the taxa are all the same. You would define *allTierTrees* as *c(tier4, tier3, tier2, tier1, graftedTree)* and *tierNames* should be defined appropriately. This will yield a tree with accurate (but possibly incomplete) node support values. Note that your tree cannot include polytomies with mode = "quartet"
+-Adding an additional "artificial" tier. You might use this if, for example, the final tree you want to present was a manually grafted version of your "whole-tree". So, the topology is different but the taxa are all the same. You would define *allTierTrees* as *c(tier4, tier3, tier2, tier1, graftedTree)* and *tierNames* should be defined appropriately. This will yield a tree with accurate (but possibly incomplete) node support values. Note that your tree cannot include polytomies with mode = "quartet"
 
 -Removing later tier trees in "quartet mode". Since adding taxa to later tiers can obscure some quartets from appearing in the final support-mapped tree you might consider checking what the support looks like on a less-completely sampled tree. This would yield accurate (and possibly highly informative) support values on an incompletely sampled tree.
 
